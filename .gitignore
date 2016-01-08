@@ -1,0 +1,6 @@
+dist
+*.o
+*.hi
+Hit
+.cabal-sandbox
+cabal.sandbox.config
