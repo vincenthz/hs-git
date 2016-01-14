@@ -52,7 +52,6 @@ Library
                    , utf8-string
                    , patience
   Exposed-modules:   Data.Git
-                     Data.Git.FS
                      Data.Git.Monad
                      Data.Git.Types
                      Data.Git.Storage
