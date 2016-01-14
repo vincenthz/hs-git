@@ -16,11 +16,11 @@ module Data.Git.Diff
     , BlobStateDiff(..)
     , getDiffWith
     -- * Default helpers
-    , HitDiff(..)
-    , HitFileContent(..)
+    , GitDiff(..)
+    , GitFileContent(..)
     , FilteredDiff(..)
-    , HitFileRef(..)
-    , HitFileMode(..)
+    , GitFileRef(..)
+    , GitFileMode(..)
     , TextLine(..)
     , defaultDiff
     , getDiff
@@ -55,8 +55,7 @@ data BlobState = BlobState
 --
 -- > ((BlobState x _ _ _) == (BlobState y _ _ _)) = (x == y)
 instance Eq BlobState where
-    (BlobState f1 _ _ _) == (BlobState f2 _ _ _) = (f2 == f1)
-    a /= b = not (a == b)
+    (BlobState f1 _ _ _) == (BlobState f2 _ _ _) = f2 == f1
 
 -- | Represents a file state between two revisions
 -- A file (a blob) can be present in the first Tree's revision but not in the
@@ -161,7 +160,7 @@ instance Ord TextLine where
 
 data FilteredDiff = NormalLine (Item TextLine) | Separator
 
-data HitFileContent = NewBinaryFile
+data GitFileContent = NewBinaryFile
                     | OldBinaryFile
                     | NewTextFile  [TextLine]
                     | OldTextFile  [TextLine]
@@ -169,12 +168,12 @@ data HitFileContent = NewBinaryFile
                     | ModifiedFile [FilteredDiff]
                     | UnModifiedFile
 
-data HitFileMode = NewMode        ModePerm
+data GitFileMode = NewMode        ModePerm
                  | OldMode        ModePerm
                  | ModifiedMode   ModePerm ModePerm
                  | UnModifiedMode ModePerm
 
-data HitFileRef = NewRef        Ref
+data GitFileRef = NewRef        Ref
                 | OldRef        Ref
                 | ModifiedRef   Ref Ref
                 | UnModifiedRef Ref
@@ -185,11 +184,11 @@ data HitFileRef = NewRef        Ref
 --   * a file diff (with the Data.Algorithm.Patience method)
 --   * the file's mode (i.e. the file priviledge)
 --   * the file's ref
-data HitDiff = HitDiff
+data GitDiff = GitDiff
     { hFileName    :: EntPath
-    , hFileContent :: HitFileContent
-    , hFileMode    :: HitFileMode
-    , hFileRef     :: HitFileRef
+    , hFileContent :: GitFileContent
+    , hFileMode    :: GitFileMode
+    , hFileRef     :: GitFileRef
     }
 
 -- | A default Diff getter which returns all diff information (Mode, Content
@@ -199,29 +198,29 @@ data HitDiff = HitDiff
 getDiff :: Ref
         -> Ref
         -> Git
-        -> IO [HitDiff]
+        -> IO [GitDiff]
 getDiff = getDiffWith (defaultDiff 5) []
 
 -- | A default diff helper. It is an example about how you can write your own
 -- diff helper or you can use it if you want to get all of differences.
 defaultDiff :: Int           -- ^ Number of line for context
             -> BlobStateDiff
-            -> [HitDiff]     -- ^ Accumulator
-            -> [HitDiff]     -- ^ Accumulator with a new content
+            -> [GitDiff]     -- ^ Accumulator
+            -> [GitDiff]     -- ^ Accumulator with a new content
 defaultDiff _ (OnlyOld   old    ) acc =
     let oldMode    = OldMode (bsMode old)
         oldRef     = OldRef  (bsRef  old)
         oldContent = case bsContent old of
                          BinaryContent _ -> OldBinaryFile
                          FileContent   l -> OldTextFile (Prelude.zipWith TextLine [1..] l)
-    in (HitDiff (bsFilename old) oldContent oldMode oldRef):acc
+    in (GitDiff (bsFilename old) oldContent oldMode oldRef):acc
 defaultDiff _ (OnlyNew       new) acc =
     let newMode    = NewMode (bsMode new)
         newRef     = NewRef  (bsRef  new)
         newContent = case bsContent new of
                          BinaryContent _ -> NewBinaryFile
                          FileContent   l -> NewTextFile (Prelude.zipWith TextLine [1..] l)
-    in (HitDiff (bsFilename new) newContent newMode newRef):acc
+    in (GitDiff (bsFilename new) newContent newMode newRef):acc
 defaultDiff context (OldAndNew old new) acc =
     let mode = if (bsMode old) /= (bsMode new) then ModifiedMode (bsMode old) (bsMode new)
                                                else UnModifiedMode (bsMode new)
@@ -229,12 +228,12 @@ defaultDiff context (OldAndNew old new) acc =
                                             else ModifiedRef (bsRef old) (bsRef new)
     in case (mode, ref) of
            ((UnModifiedMode _), (UnModifiedRef _)) -> acc
-           _ -> (HitDiff (bsFilename new) (content ref) mode ref):acc
-    where content :: HitFileRef -> HitFileContent
+           _ -> (GitDiff (bsFilename new) (content ref) mode ref):acc
+    where content :: GitFileRef -> GitFileContent
           content (UnModifiedRef _) = UnModifiedFile
           content _                 = createDiff (bsContent old) (bsContent new)
 
-          createDiff :: BlobContent -> BlobContent -> HitFileContent
+          createDiff :: BlobContent -> BlobContent -> GitFileContent
           createDiff (FileContent a) (FileContent b) =
               let linesA = Prelude.zipWith TextLine [1..] a
                   linesB = Prelude.zipWith TextLine [1..] b
@@ -242,7 +241,7 @@ defaultDiff context (OldAndNew old new) acc =
           createDiff _ _ = ModifiedBinaryFile
 
 -- Used by diffGetContext
-data HitwebAccu = AccuBottom | AccuTop
+data GitAccu = AccuBottom | AccuTop
 
 -- Context filter
 diffGetContext :: Int -> [Item TextLine] -> [FilteredDiff]
@@ -257,7 +256,7 @@ diffGetContext context list =
     where -- only keep 'context'. The file is annalyzed from the bottom to the top.
           -- The accumulator here is a tuple3 with (the line counter, the
           -- direction and the list of elements)
-          filterContext :: (Item TextLine) -> (Int, HitwebAccu, [FilteredDiff]) -> (Int, HitwebAccu, [FilteredDiff])
+          filterContext :: (Item TextLine) -> (Int, GitAccu, [FilteredDiff]) -> (Int, GitAccu, [FilteredDiff])
           filterContext (Both l1 l2) (c, AccuBottom, acc) =
               if c < context then (c+1, AccuBottom, (NormalLine (Both l1 l2)):acc)
                              else (c  , AccuBottom, (NormalLine (Both l1 l2))
