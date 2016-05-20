@@ -41,23 +41,18 @@ module Data.Git.Storage
     , setObject
     ) where
 
-import Filesystem
-import Filesystem.Path hiding (concat)
-import Filesystem.Path.Rules
-import System.Environment
-
-import Control.Applicative
 import Control.Exception
 import qualified Control.Exception as E
 import Control.Monad
 
-import Data.String
 import Data.List ((\\), isPrefixOf)
 import Data.Either (partitionEithers)
 import Data.IORef
 import Data.Word
 
 import Data.Git.Named
+import Data.Git.Imports
+import Data.Git.OS
 import Data.Git.Path (packedRefsPath)
 import Data.Git.Delta
 import Data.Git.Storage.FileReader
@@ -71,8 +66,6 @@ import Data.Git.Config
 
 import qualified Data.Map as M
 
-import Prelude hiding (FilePath)
-
 data PackIndexReader = PackIndexReader PackIndexHeader FileReader
 
 -- | this is a cache representation of the packed-ref file
@@ -81,7 +74,7 @@ type CachedPackedRef = CacheFile (PackedRefs (M.Map RefName Ref))
 -- | represent a git repo, with possibly already opened filereaders
 -- for indexes and packs
 data Git = Git
-    { gitRepoPath  :: FilePath
+    { gitRepoPath  :: LocalPath
     , indexReaders :: IORef [(Ref, PackIndexReader)]
     , packReaders  :: IORef [(Ref, FileReader)]
     , packedNamed  :: CachedPackedRef
@@ -89,7 +82,7 @@ data Git = Git
     }
 
 -- | open a new git repository context
-openRepo :: FilePath -> IO Git
+openRepo :: LocalPath -> IO Git
 openRepo path = Git path <$> newIORef []
                          <*> newIORef []
                          <*> packedRef
@@ -113,13 +106,13 @@ closeRepo (Git { indexReaders = ireaders, packReaders = preaders }) = do
 --
 -- If the environment variable GIT_DIR is set then it's used,
 -- otherwise iterate from current directory, up to 128 parents for a .git directory
-findRepoMaybe :: IO (Maybe FilePath)
+findRepoMaybe :: IO (Maybe LocalPath)
 findRepoMaybe = do
-    menvDir <- E.catch (Just . decodeString posix_ghc704 <$> getEnv "GIT_DIR") (\(_:: SomeException) -> return Nothing)
+    menvDir <- E.catch (Just <$> getEnvAsPath "GIT_DIR") (\(_:: SomeException) -> return Nothing)
     case menvDir of
         Nothing     -> getWorkingDirectory >>= checkDir 0
         Just envDir -> isRepo envDir >>= \e -> return (if e then Just envDir else Nothing)
-  where checkDir :: Int -> FilePath -> IO (Maybe FilePath)
+  where checkDir :: Int -> LocalPath -> IO (Maybe LocalPath)
         checkDir 128 _  = return Nothing
         checkDir n   wd = do
             let filepath = wd </> ".git"
@@ -130,16 +123,16 @@ findRepoMaybe = do
 --
 -- If the environment variable GIT_DIR is set then it's used,
 -- otherwise iterate from current directory, up to 128 parents for a .git directory
-findRepo :: IO FilePath
+findRepo :: IO LocalPath
 findRepo = do
-    menvDir <- E.catch (Just . decodeString posix_ghc704 <$> getEnv "GIT_DIR") (\(_:: SomeException) -> return Nothing)
+    menvDir <- E.catch (Just <$> getEnvAsPath "GIT_DIR") (\(_:: SomeException) -> return Nothing)
     case menvDir of
         Nothing     -> getWorkingDirectory >>= checkDir 0
         Just envDir -> do
             e <- isRepo envDir
-            when (not e) $ error "environment GIT_DIR is not a git repository" 
+            when (not e) $ error "environment GIT_DIR is not a git repository"
             return envDir
-  where checkDir :: Int -> FilePath -> IO FilePath
+  where checkDir :: Int -> LocalPath -> IO LocalPath
         checkDir 128 _  = error "not a git repository"
         checkDir n   wd = do
             let filepath = wd </> ".git"
@@ -156,7 +149,7 @@ withCurrentRepo :: (Git -> IO a) -> IO a
 withCurrentRepo f = findRepo >>= \path -> withRepo path f
 
 -- | basic checks to see if a specific path looks like a git repo.
-isRepo :: FilePath -> IO Bool
+isRepo :: LocalPath -> IO Bool
 isRepo path = do
     dir     <- isDirectory path
     subDirs <- mapM (isDirectory . (path </>))
@@ -166,11 +159,11 @@ isRepo path = do
     return $ and ([dir] ++ subDirs)
 
 -- | initialize a new repository at a specific location.
-initRepo :: FilePath -> IO ()
+initRepo :: LocalPath -> IO ()
 initRepo path = do
     exists <- isDirectory path
     when exists $ error "destination directory already exists"
-    createDirectory True path
+    createParentDirectory path
     mapM_ (createDirectory False . (path </>))
         [ "branches", "hooks", "info"
         , "logs", "objects", "refs"
@@ -182,7 +175,7 @@ getDescription git = do
     isdescription <- isFile descriptionPath
     if (isdescription)
         then do
-                content <- Prelude.readFile $ encodeString posix descriptionPath
+                content <- readTextFile descriptionPath
                 return $ Just content
         else return Nothing
   where descriptionPath = (gitRepoPath git) </> "description"
@@ -190,7 +183,7 @@ getDescription git = do
 -- | set the repository's description
 setDescription :: Git -> String -> IO ()
 setDescription git desc = do
-    Prelude.writeFile (encodeString posix descriptionPath) desc
+    writeTextFile descriptionPath desc
   where descriptionPath = (gitRepoPath git) </> "description"
 
 iterateIndexes git f initAcc = do
@@ -252,7 +245,7 @@ findReferencesWithPrefix git pre
         return (looseRefs ++ packedRefs)
   where -- not very efficient way to do that... will do for now.
         matchRef ref = pre `isPrefixOf` toHexString ref
-        invalidLength = length pre < 2 || length pre > 39 
+        invalidLength = length pre < 2 || length pre > 39
 
         idxPrefixMatch acc (_, (PackIndexReader idxhdr indexreader)) = do
             refs <- packIndexGetReferencesWithPrefix idxhdr indexreader pre

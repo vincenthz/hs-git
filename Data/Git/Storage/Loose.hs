@@ -33,14 +33,11 @@ import Codec.Compression.Zlib
 import Data.Git.Ref
 import Data.Git.Path
 import Data.Git.Internal
+import Data.Git.OS
 import Data.Git.Imports
 import Data.Git.Storage.FileWriter
 import Data.Git.Storage.Object
 import qualified Data.Git.Parser as P
-
-import Filesystem
-import Filesystem.Path
-import qualified Filesystem.Path.Rules as Rules
 
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as L
@@ -53,7 +50,18 @@ import qualified Control.Exception as E
 import Data.String
 import Data.Char (isHexDigit)
 
-import Prelude hiding (FilePath)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
+import Codec.Compression.Zlib
+
+newtype Zipped = Zipped { getZippedData :: L.ByteString }
+    deriving (Show,Eq)
+
+readZippedFile :: LocalPath -> IO Zipped
+readZippedFile fp = Zipped <$> readBinaryFileLazy fp
+
+dezip :: Zipped -> L.ByteString
+dezip = decompress . getZippedData
 
 isObjectPrefix [a,b] = isHexDigit a && isHexDigit b
 isObjectPrefix _     = False
@@ -119,14 +127,14 @@ looseExists repoPath ref = isFile (objectPathOfRef repoPath ref)
 looseEnumeratePrefixes repoPath = filter isObjectPrefix <$> getDirectoryContents (repoPath </> fromString "objects")
 
 -- | enumerate all references available with a specific prefix.
-looseEnumerateWithPrefixFilter :: FilePath -> String -> (Ref -> Bool) -> IO [Ref]
+looseEnumerateWithPrefixFilter :: LocalPath -> String -> (Ref -> Bool) -> IO [Ref]
 looseEnumerateWithPrefixFilter repoPath prefix filterF =
         filter filterF . map (fromHexString . (prefix ++)) . filter isRef <$> getDir (repoPath </> fromString "objects" </> fromString prefix)
         where
                 getDir p = E.catch (getDirectoryContents p) (\(_::SomeException) -> return [])
                 isRef l = length l == 38
 
-looseEnumerateWithPrefix :: FilePath -> String -> IO [Ref]
+looseEnumerateWithPrefix :: LocalPath -> String -> IO [Ref]
 looseEnumerateWithPrefix repoPath prefix =
         looseEnumerateWithPrefixFilter repoPath prefix (const True)
 
@@ -162,7 +170,7 @@ looseWriteBlobFromFile repoPath file = do
 
 -- | write an object to disk as a loose reference.
 -- use looseWriteBlobFromFile for efficiently writing blobs when being commited from a file.
-looseWrite repoPath obj = createDirectory True (directory path)
+looseWrite repoPath obj = createParentDirectory path
                        >> isFile path
                        >>= \exists -> unless exists (writeFileLazy path $ compress content)
                        >> return ref
@@ -172,4 +180,4 @@ looseWrite repoPath obj = createDirectory True (directory path)
                 ref     = hashLBS content
                 writeFileLazy p bs = withFile p WriteMode (\h -> L.hPut h bs)
 
-getDirectoryContents p = map (Rules.encodeString Rules.posix . filename) <$> listDirectory p
+getDirectoryContents p = listDirectoryFilename p

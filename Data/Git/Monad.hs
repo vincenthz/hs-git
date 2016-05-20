@@ -83,8 +83,9 @@ import qualified Data.Git.Revision as Git
 import qualified Data.Git.Repository as Git
 import qualified Data.Git.Storage.Object as Git
 import           Data.Git.Imports
+import           Data.Git.OS
 
-import qualified Filesystem.Path as FP
+--import qualified Filesystem.Path as FP
 
 import Data.Set (Set)
 
@@ -279,7 +280,7 @@ executeGitM git m = do
         ResultSuccess _   v -> Right v
         ResultFailure err   -> Left err
 
-withRepo :: FP.FilePath -> GitM a -> IO (Either String a)
+withRepo :: LocalPath -> GitM a -> IO (Either String a)
 withRepo repoPath m = Git.withRepo repoPath (\git -> executeGitM git m)
 
 withCurrentRepo :: GitM a -> IO (Either String a)
@@ -578,7 +579,7 @@ deleteFile path = do
 --
 -- Example:
 --
--- > withCurrentRepo $ 
+-- > withCurrentRepo $
 -- >    (r, ()) <- withNewCommit person Nothing $ do
 -- >        setMessage "inital commit"
 -- >        setFile ["README.md"] "# My awesome project\n\nthis is a new project\n"

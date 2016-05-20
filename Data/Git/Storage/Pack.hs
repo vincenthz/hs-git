@@ -27,10 +27,6 @@ module Data.Git.Storage.Pack
 
 import Control.Arrow (second)
 
-import qualified Filesystem.Path.Rules as Rules
-import Filesystem.Path
-import Filesystem
-
 import Data.Bits
 import Data.List
 import qualified Data.ByteString.Lazy as L
@@ -43,10 +39,10 @@ import Data.Git.Storage.Object
 import Data.Git.Delta
 import Data.Git.Ref
 import Data.Git.Types
+import Data.Git.OS
 import Data.Git.Storage.FileReader
 
 import Data.Word
-import Prelude hiding (FilePath)
 
 type PackedObjectRaw = (PackedObjectInfo, L.ByteString)
 
@@ -59,7 +55,7 @@ data PackedObjectInfo = PackedObjectInfo
         } deriving (Show,Eq)
 
 -- | Enumerate the pack refs available in this repository.
-packEnumerate repoPath = map onlyHash . filter isPackFile . map (Rules.encodeString Rules.posix . filename) <$> listDirectory (repoPath </> "objects" </> "pack")
+packEnumerate repoPath = map onlyHash . filter isPackFile <$> listDirectoryFilename (repoPath </> "objects" </> "pack")
   where
         isPackFile :: String -> Bool
         isPackFile x = ".pack" `isSuffixOf` x
@@ -67,7 +63,7 @@ packEnumerate repoPath = map onlyHash . filter isPackFile . map (Rules.encodeStr
         takebut n l = take (length l - n) l
 
 -- | open a pack
-packOpen :: FilePath -> Ref -> IO FileReader
+packOpen :: LocalPath -> Ref -> IO FileReader
 packOpen repoPath packRef = openFile (packPath repoPath packRef) ReadMode >>= fileReaderNew False
 
 -- | close a pack

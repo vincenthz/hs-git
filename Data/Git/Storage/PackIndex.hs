@@ -25,10 +25,6 @@ module Data.Git.Storage.PackIndex
         , packIndexGetHeader
         ) where
 
-import Filesystem
-import Filesystem.Path
-import qualified Filesystem.Path.Rules as Rules
-
 import Data.List
 import Data.Bits
 import Data.Word
@@ -39,12 +35,11 @@ import qualified Data.Vector as V
 
 import Data.Git.Internal
 import Data.Git.Imports
+import Data.Git.OS
 import Data.Git.Storage.FileReader
 import Data.Git.Path
 import Data.Git.Ref
 import qualified Data.Git.Parser as P
-
-import Prelude hiding (FilePath)
 
 -- | represent an packIndex header with the version and the fanout table
 data PackIndexHeader = PackIndexHeader !Word32 !(Vector Word32)
@@ -59,7 +54,7 @@ data PackIndex = PackIndex
         }
 
 -- | enumerate every indexes file in the pack directory
-packIndexEnumerate repoPath = map onlyHash . filter isPackFile . map (Rules.encodeString Rules.posix . filename) <$> listDirectory (repoPath </> "objects" </> "pack")
+packIndexEnumerate repoPath = map onlyHash . filter isPackFile <$> listDirectoryFilename (repoPath </> "objects" </> "pack")
   where
         isPackFile :: String -> Bool
         isPackFile x = ".idx" `isSuffixOf` x && "pack-" `isPrefixOf` x
@@ -67,7 +62,7 @@ packIndexEnumerate repoPath = map onlyHash . filter isPackFile . map (Rules.enco
         takebut n l = take (length l - n) l
 
 -- | open an index
-packIndexOpen :: FilePath -> Ref -> IO FileReader
+packIndexOpen :: LocalPath -> Ref -> IO FileReader
 packIndexOpen repoPath indexRef = openFile (indexPath repoPath indexRef) ReadMode >>= fileReaderNew False
 
 -- | close an index
@@ -162,7 +157,7 @@ packIndexReadHeader :: FileReader -> IO PackIndexHeader
 packIndexReadHeader fr = fileReaderSeek fr 0 >> fileReaderParse fr parsePackIndexHeader
 
 -- | get index header from an index reference
-packIndexGetHeader :: FilePath -> Ref -> IO PackIndexHeader
+packIndexGetHeader :: LocalPath -> Ref -> IO PackIndexHeader
 packIndexGetHeader repoPath indexRef = withPackIndex repoPath indexRef $ packIndexReadHeader
 
 -- | read all index

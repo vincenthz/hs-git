@@ -21,9 +21,8 @@ module Data.Git.Config
 
 import Data.Git.Path
 import Data.Git.Imports
+import Data.Git.OS
 import Data.List (find)
-import Filesystem.Path.CurrentOS
-import Filesystem (getHomeDirectory)
 import qualified Data.Set as S
 
 newtype Config = Config [Section]
@@ -62,7 +61,7 @@ parseConfig = Config . reverse . toSections . foldl accSections ([], Nothing) . 
         strip s = dropSpaces $ reverse $ dropSpaces $ reverse s
           where dropSpaces = dropWhile (\c -> c == ' ' || c == '\t')
 
-readConfigPath filepath = parseConfig <$> readFile (encodeString filepath)
+readConfigPath filepath = parseConfig <$> readTextFile filepath
 readConfig gitRepo = readConfigPath (configPath gitRepo)
 
 readGlobalConfig = getHomeDirectory >>= readConfigPath . (\homeDir -> homeDir </> ".gitconfig")

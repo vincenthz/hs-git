@@ -8,15 +8,13 @@
 module Data.Git.Storage.FileWriter where
 
 import Data.Git.Ref
+import Data.Git.OS
 import Data.IORef
 import qualified Data.ByteString as B
 import Codec.Zlib
 import Control.Exception (bracket)
 
 import qualified Crypto.Hash.SHA1 as SHA1
-
-import System.IO (hClose)
-import Filesystem
 
 defaultCompression = 6
 

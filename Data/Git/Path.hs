@@ -8,10 +8,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Data.Git.Path where
 
-import Filesystem.Path.CurrentOS
 import System.Random
 import Data.Git.Ref
 import Data.Git.Imports
+import Data.Git.OS
 import Data.String
 
 configPath gitRepo = gitRepo </> "config"

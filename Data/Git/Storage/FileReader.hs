@@ -34,6 +34,7 @@ import Data.ByteString.Lazy.Internal (defaultChunkSize)
 import Data.IORef
 
 import Data.Git.Imports
+import Data.Git.OS
 import qualified Data.Git.Parser as P
 
 import Data.Data
@@ -44,9 +45,7 @@ import Codec.Zlib.Lowlevel
 import Foreign.ForeignPtr
 import qualified Control.Exception as E
 
-import System.IO (hClose, hSeek, SeekMode(..))
-import Filesystem
-import Prelude hiding (FilePath)
+import System.IO (hSeek, SeekMode(..))
 
 data FileReader = FileReader
         { fbHandle     :: Handle
@@ -71,12 +70,12 @@ fileReaderNew decompress handle = do
 fileReaderClose :: FileReader -> IO ()
 fileReaderClose = hClose . fbHandle
 
-withFileReader :: FilePath -> (FileReader -> IO a) -> IO a
+withFileReader :: LocalPath -> (FileReader -> IO a) -> IO a
 withFileReader path f =
         bracket (openFile path ReadMode) (hClose) $ \handle ->
                 bracket (fileReaderNew False handle) (\_ -> return ()) f
 
-withFileReaderDecompress :: FilePath -> (FileReader -> IO a) -> IO a
+withFileReaderDecompress :: LocalPath -> (FileReader -> IO a) -> IO a
 withFileReaderDecompress path f =
         bracket (openFile path ReadMode) (hClose) $ \handle ->
                 bracket (fileReaderNew True handle) (\_ -> return ()) f

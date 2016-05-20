@@ -67,6 +67,7 @@ Library
                      Data.Git.Diff
   Other-modules:     Data.Git.Internal
                      Data.Git.Imports
+                     Data.Git.OS
                      Data.Git.Config
                      Data.Git.Storage.FileReader
                      Data.Git.Storage.FileWriter
@@ -85,7 +86,7 @@ Test-Suite test-unit
                    , tasty
                    , tasty-quickcheck
                    , hourglass
-                   , hit
+                   , git
 
 Test-Suite test-repository
   type:              exitcode-stdio-1.0
@@ -97,7 +98,7 @@ Test-Suite test-repository
                    , tasty-quickcheck
                    , hourglass
                    , bytedump >= 1.0
-                   , hit
+                   , git
 
 source-repository head
   type: git
