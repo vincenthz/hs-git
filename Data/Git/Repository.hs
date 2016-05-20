@@ -70,7 +70,7 @@ type HTree = [(ModePerm,EntName,HTreeEnt)]
 -- | Exception when trying to convert an object pointed by 'Ref' to
 -- a type that is different
 data InvalidType = InvalidType Ref ObjectType
-                 deriving (Show,Eq,Data,Typeable)
+                 deriving (Show,Eq,Typeable)
 
 instance Exception InvalidType
 

@@ -14,7 +14,7 @@ import qualified Data.ByteString as B
 import Codec.Zlib
 import Control.Exception (bracket)
 
-import qualified Crypto.Hash.SHA1 as SHA1
+import Crypto.Hash
 
 defaultCompression = 6
 
@@ -29,12 +29,12 @@ modifyIORefStrict ref f = do
 data FileWriter = FileWriter
         { writerHandle  :: Handle
         , writerDeflate :: Deflate
-        , writerDigest  :: IORef SHA1.Ctx
+        , writerDigest  :: IORef (Context SHA1)
         }
 
 fileWriterNew handle = do
         deflate <- initDeflate defaultCompression defaultWindowBits
-        digest  <- newIORef SHA1.init
+        digest  <- newIORef hashInit
         return $ FileWriter
                 { writerHandle  = handle
                 , writerDeflate = deflate
@@ -48,10 +48,10 @@ withFileWriter path f =
 postDeflate handle = maybe (return ()) (B.hPut handle)
 
 fileWriterOutput (FileWriter { writerHandle = handle, writerDigest = digest, writerDeflate = deflate }) bs = do
-        modifyIORefStrict digest (\ctx -> SHA1.update ctx bs)
+        modifyIORefStrict digest (\ctx -> hashUpdate ctx bs)
         (>>= postDeflate handle) =<< feedDeflate deflate bs
 
 fileWriterClose (FileWriter { writerHandle = handle, writerDeflate = deflate }) =
         postDeflate handle =<< finishDeflate deflate
 
-fileWriterGetDigest (FileWriter { writerDigest = digest }) = (fromBinary . SHA1.finalize) `fmap` readIORef digest
+fileWriterGetDigest (FileWriter { writerDigest = digest }) = (fromDigest . hashFinalize) `fmap` readIORef digest
