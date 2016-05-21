@@ -39,20 +39,14 @@ import Data.Git.Storage.FileWriter
 import Data.Git.Storage.Object
 import qualified Data.Git.Parser as P
 
-import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString as B
 
-import Data.Attoparsec.Lazy
 import Control.Exception (onException, SomeException)
 import qualified Control.Exception as E
 
 import Data.String
 import Data.Char (isHexDigit)
-
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
-import Codec.Compression.Zlib
 
 newtype Zipped = Zipped { getZippedData :: L.ByteString }
     deriving (Show,Eq)
@@ -68,15 +62,15 @@ isObjectPrefix _     = False
 
 -- loose object parsing
 parseHeader = do
-        h <- takeWhile1 ((/=) 0x20)
-        _ <- word8 0x20
+        h <- P.takeWhile1 ((/=) 0x20)
+        _ <- P.word8 0x20
         sz <- P.decimal
         return (objectTypeUnmarshall h, fromIntegral sz, Nothing)
 
-parseTreeHeader   = P.string "tree " >> P.decimal >> word8 0
-parseTagHeader    = P.string "tag " >> P.decimal >> word8 0
-parseCommitHeader = P.string "commit " >> P.decimal >> word8 0
-parseBlobHeader   = P.string "blob " >> P.decimal >> word8 0
+parseTreeHeader   = P.string "tree " >> P.decimal >> P.word8 0
+parseTagHeader    = P.string "tag " >> P.decimal >> P.word8 0
+parseCommitHeader = P.string "commit " >> P.decimal >> P.word8 0
+parseBlobHeader   = P.string "blob " >> P.decimal >> P.word8 0
 
 parseTree   = parseTreeHeader >> objectParseTree
 parseTag    = parseTagHeader >> objectParseTag
@@ -102,7 +96,7 @@ looseUnmarshallRaw stream =
                 Nothing  -> error "object not right format. missing 0"
                 Just idx ->
                         let (h, r) = L.splitAt (idx+1) stream in
-                        case maybeResult $ parse parseHeader h of
+                        case P.maybeResult $ P.parse parseHeader h of
                                 Nothing  -> error "cannot open object"
                                 Just hdr -> (hdr, r)
 

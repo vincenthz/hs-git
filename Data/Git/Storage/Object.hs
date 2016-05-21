@@ -167,19 +167,11 @@ octal = B.foldl' step 0 `fmap` takeWhile1 isOct
 modeperm :: Parser ModePerm
 modeperm = ModePerm . fromIntegral <$> octal
 
-tillEOL :: Parser ByteString
-tillEOL = PC.takeWhile ((/= '\n'))
-
-skipEOL = skipChar '\n'
-
-skipChar :: Char -> Parser ()
-skipChar c = PC.char c >> return ()
-
 -- | parse a tree content
 treeParse = Tree <$> parseEnts
     where parseEnts = atEnd >>= \end -> if end then return [] else liftM2 (:) parseEnt parseEnts
           parseEnt = liftM3 (,,) modeperm parseEntName (word8 0 >> P.referenceBin)
-          parseEntName = entName <$> (PC.char ' ' >> takeTill ((==) 0))
+          parseEntName = entName <$> (P.skipASCII ' ' >> takeTill ((==) 0))
 
 -- | parse a blob content
 blobParse = (Blob <$> takeLazyByteString)
@@ -187,45 +179,45 @@ blobParse = (Blob <$> takeLazyByteString)
 -- | parse a commit content
 commitParse = do
         tree <- P.string "tree " >> P.referenceHex
-        skipChar '\n'
+        P.skipEOL
         parents   <- many parseParentRef
         author    <- P.string "author " >> parsePerson
         committer <- P.string "committer " >> parsePerson
-        encoding  <- option Nothing $ Just <$> (PC.string "encoding " >> tillEOL)
+        encoding  <- option Nothing $ Just <$> (P.string "encoding " >> P.tillEOL)
         extras    <- many parseExtra
-        skipChar '\n'
+        P.skipEOL
         message <- takeByteString
         return $ Commit tree parents author committer encoding extras message
         where
                 parseParentRef = do
                         tree <- P.string "parent " >> P.referenceHex
-                        skipChar '\n'
+                        P.skipEOL
                         return tree
                 parseExtra = do
                         f <- B.singleton <$> notWord8 0xa
-                        r <- tillEOL
-                        skipEOL
-                        v <- concatLines <$> many (P.string " " *> tillEOL <* skipEOL)
+                        r <- P.tillEOL
+                        P.skipEOL
+                        v <- concatLines <$> many (P.string " " *> P.tillEOL <* P.skipEOL)
                         return $ CommitExtra (f `B.append` r) v
                 concatLines = B.concat . intersperse (B.pack [0xa])
 
 -- | parse a tag content
 tagParse = do
         object <- P.string "object " >> P.referenceHex
-        skipChar '\n'
+        P.skipEOL
         type_ <- objectTypeUnmarshall <$> (P.string "type " >> takeTill ((==) 0x0a))
-        skipChar '\n'
-        tag   <- P.string "tag " >> takeTill ((==) 0x0a)
-        skipChar '\n'
+        P.skipEOL
+        tag   <- P.string "tag " >> P.takeTill ((==) 0x0a)
+        P.skipEOL
         tagger <- P.string "tagger " >> parsePerson
-        skipChar '\n'
+        P.skipEOL
         signature <- takeByteString
         return $ Tag object type_ tag tagger signature
 
 parsePerson = do
-        name <- B.init <$> PC.takeWhile ((/=) '<')
-        skipChar '<'
-        email <- PC.takeWhile ((/=) '>')
+        name <- B.init <$> P.takeWhileASCII ((/=) '<')
+        P.skipASCII '<'
+        email <- P.takeWhileASCII ((/=) '>')
         _ <- P.string "> "
         time <- PC.decimal :: Parser Integer
         _ <- P.string " "
@@ -233,7 +225,7 @@ parsePerson = do
         let timezoneSign = if timezoneFmt < 0 then negate else id
         let (h,m)    = abs timezoneFmt `divMod` 100
             timezone = timezoneSign (h * 60 + m)
-        skipChar '\n'
+        P.skipEOL
         return $ Person name email (gitTime time timezone)
 
 objectParseTree   = ObjTree <$> treeParse
