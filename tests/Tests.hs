@@ -10,6 +10,7 @@ import Control.Monad
 import Data.Git.Storage.Object
 import Data.Git.Storage.Loose
 import Data.Git.Ref
+import Data.Git.Revision
 import Data.Git.Types
 import Data.Hourglass
 
@@ -56,6 +57,23 @@ instance Arbitrary GitTime where
     arbitrary = GitTime <$> arbitrary <*> arbitrary
 instance Arbitrary ModePerm where
     arbitrary = ModePerm <$> elements [ 0o644, 0o664, 0o755, 0 ]
+instance Arbitrary RevModifier where
+    arbitrary = oneof
+        [ RevModParent . getPositive <$> arbitrary
+        , RevModParentFirstN . getPositive <$> arbitrary
+        , RevModAtType <$> arbitraryType
+        , RevModAtDate <$> arbitraryDate
+        --, RevModAtN . getPositive <$> arbitrary
+        ]
+
+arbitraryDate = elements ["yesterday","29-Jan-1982","5 days ago"]
+arbitraryType = elements ["commit","tree"]
+
+instance Arbitrary Revision where
+    arbitrary = do
+        s   <- choose (1,40) >>= flip replicateM (elements ['a'..'z'])
+        rms <- choose (1,4) >>= flip replicateM arbitrary
+        return $ Revision s rms
 
 arbitraryName = liftM3 Person (arbitraryBSnoangle 16)
                               (arbitraryBSnoangle 16)
@@ -96,9 +114,13 @@ prop_object_marshalling_id (ObjNoDelta obj) = obj `assertEq` (looseUnmarshall $ 
 refTests =
     [ testProperty "hexadecimal" (marshEqual (fromHex . toHex))
     , testProperty "binary" (marshEqual (fromBinary . toBinary))
+    , testProperty "ref" $ marshEqual (fromString . show :: Revision -> Revision)
     ]
     where
-        marshEqual t ref = ref == t ref
+        marshEqual t ref = ref `assertEq` t ref
+        assertEq a b
+            | a == b    = True
+            | otherwise = error ("expecting: " ++ show a ++ " got: " ++ show b)
 
 objTests =
     [ testProperty "unmarshall.marshall==id" prop_object_marshalling_id
