@@ -13,7 +13,6 @@ module Data.Git.Delta
     , deltaApply
     ) where
 
-import Control.Applicative (many)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as L
 import Data.Bits
