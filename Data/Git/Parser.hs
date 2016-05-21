@@ -15,7 +15,7 @@ module Data.Git.Parser
     , tillEOL
     , skipEOL
     , skipASCII
-    , takeWhileASCII
+    , takeUntilASCII
     -- * Simple re-export
     , A.anyWord8
     , takeBytes
@@ -59,7 +59,7 @@ eitherParseChunks f = AL.eitherResult . AL.parse f
 
 takeBytes = A.take
 
-takeWhileASCII pred = undefined
+takeUntilASCII char = AL.takeWhile (\c -> if fromEnum c < 0x80 then fromEnum c == fromEnum char else True)
 
 tillEOL = A.takeWhile (/= asciiEOL)
 skipEOL = A.word8 asciiEOL >> return ()

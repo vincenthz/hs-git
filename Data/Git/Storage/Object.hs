@@ -207,7 +207,7 @@ tagParse = do
         P.skipEOL
         type_ <- objectTypeUnmarshall <$> (P.string "type " >> takeTill ((==) 0x0a))
         P.skipEOL
-        tag   <- P.string "tag " >> P.takeTill ((==) 0x0a)
+        tag   <- P.string "tag " >> P.tillEOL -- PC.takeTill ((==) 0x0a)
         P.skipEOL
         tagger <- P.string "tagger " >> parsePerson
         P.skipEOL
@@ -215,9 +215,9 @@ tagParse = do
         return $ Tag object type_ tag tagger signature
 
 parsePerson = do
-        name <- B.init <$> P.takeWhileASCII ((/=) '<')
+        name <- B.init <$> P.takeUntilASCII '<'
         P.skipASCII '<'
-        email <- P.takeWhileASCII ((/=) '>')
+        email <- P.takeUntilASCII '>'
         _ <- P.string "> "
         time <- PC.decimal :: Parser Integer
         _ <- P.string " "
