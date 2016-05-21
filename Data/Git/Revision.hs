@@ -13,9 +13,12 @@ module Data.Git.Revision
     , fromString
     ) where
 
-import Text.Parsec
+import Control.Applicative
+import Control.Arrow (first)
 import Data.String
+import Data.List
 import Data.Data
+import Data.Char
 
 -- | A modifier to a revision, which is
 -- a function apply of a revision
@@ -57,34 +60,46 @@ instance IsString Revision where
     fromString = revFromString
 
 revFromString :: String -> Revision
-revFromString s = either (error.show) id $ parse parser "" s
-  where parser = do
+revFromString s = either (error.show) fst $ runStream parser s
+  where parser :: Stream Char Revision
+        parser = do
             p    <- many (noneOf "^~@")
             mods <- many (parseParent <|> parseFirstParent <|> parseAt)
             return $ Revision p mods
-        parseParent = try $ do
+        parseParent = do
             _ <- char '^'
-            n <- optionMaybe (some digit)
+            n <- optional (some digit)
             case n of
                 Nothing -> return $ RevModParent 1
                 Just d  -> return $ RevModParent (read d)
-        parseFirstParent = try $
+        parseFirstParent =
             RevModParentFirstN . read <$> (char '~' *> some digit)
-        parseAt = try $ do
+        parseAt = do
             _  <- char '@' >> char '{'
             at <- parseAtType <|> parseAtDate <|> parseAtN
             _  <- char '}'
             return at
-        parseAtType = try $ do
+        parseAtType = do
             RevModAtType <$> (string "tree" <|> string "commit" <|> string "blob" <|> string "tag")
-        parseAtN = try $ do
+        parseAtN = do
             RevModAtN . read <$> some digit
-        parseAtDate = try $ do
+        parseAtDate = do
             RevModAtDate <$> many (noneOf "}")
 
-some = many1
+-- combinator
+char c = eatRet (\x -> if x == c then Just c else Nothing)
+string s = prefix (\x -> if isPrefixOf s x then Just (s, length s) else Nothing)
+digit = eatRet (\x -> if isDigit x then Just x else Nothing)
+noneOf l = eatRet (\x -> if not (x `elem` l) then Just x else Nothing)
 
-{-
+prefix predicate = Stream $ \el ->
+    case el of
+        [] -> Left ("empty stream: prefix")
+        _  ->
+            case predicate el of
+                Just (a,i) -> Right (a, drop i el)
+                Nothing    -> Left ("unexpected stream")
+
 eatRet :: Show elem => (elem -> Maybe a) -> Stream elem a
 eatRet predicate = Stream $ \el ->
     case el of
@@ -118,4 +133,3 @@ instance Alternative (Stream elem) where
 instance Monad (Stream elem) where
     return a  = Stream $ \e1 -> Right (a, e1)
     ma >>= mb = Stream $ \e1 -> either Left (\(a, e2) -> runStream (mb a) e2) $ runStream ma e1
--} 

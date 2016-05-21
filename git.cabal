@@ -50,7 +50,6 @@ Library
                    , patience
                    -- to remove
                    , attoparsec >= 0.10.1
-                   , parsec     >= 3
                    , system-filepath
                    , system-fileio
   Exposed-modules:   Data.Git
