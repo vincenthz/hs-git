@@ -45,6 +45,7 @@ module Data.Git.OS
     , localPathDecode
     ) where
 
+import           Data.Git.Imports
 import           Filesystem.Path.CurrentOS
 import           Filesystem hiding (readTextFile, writeTextFile)
 import qualified Filesystem.Path.Rules as Rules
