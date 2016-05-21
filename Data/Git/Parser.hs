@@ -29,6 +29,7 @@ import qualified Data.ByteString as B
 
 import           Data.Git.Ref
 import           Data.Git.Internal
+import           Data.Git.Imports
 
 vlf = do
     bs <- A.takeWhile (\w -> w `testBit` 7)

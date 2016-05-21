@@ -2,8 +2,8 @@ module Data.Git.Index
     (
     ) where
 
-import Control.Applicative
 import Data.Git.Ref
+import Data.Git.Imports
 {-
 <INDEX_HEADER>
     :   "DIRC" <INDEX_FILE_VERSION> <INDEX_ENTRY_COUNT>
