@@ -1,5 +1,5 @@
 Name:                git
-Version:             0.0
+Version:             0.1
 Synopsis:            Git operations in haskell
 Description:
     .
