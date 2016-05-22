@@ -171,7 +171,7 @@ treeParse = Tree <$> parseEnts
           parseEntName = entName <$> (P.skipASCII ' ' >> P.takeWhile (/= 0))
 
 -- | parse a blob content
-blobParse = (Blob . L.fromStrict <$> P.takeAll)
+blobParse = (Blob . L.fromChunks . (:[]) <$> P.takeAll)
 
 -- | parse a commit content
 commitParse = do

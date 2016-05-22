@@ -91,7 +91,7 @@ eitherParseChunks p (i:is) = loop (P.parse p i) is
     loop (P.ParseOK _ a) []     = Right a
     loop (P.ParseMore c) []     = toEither $ c Nothing
     loop (P.ParseMore c) (x:xs) = loop (c $ Just x) xs
-    loop ps              l      = Left ("eitherParseChunk: error: " <> show ps <> " : " <> show (i:is))
+    loop ps              l      = Left ("eitherParseChunk: error: " <> show ps <> " : " <> show l)
 
 toEither (P.ParseOK _ a) = Right a
 toEither (P.ParseFail e) = Left e
