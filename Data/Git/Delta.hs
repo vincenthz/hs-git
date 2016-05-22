@@ -36,6 +36,7 @@ data DeltaCmd =
 -- * if first byte MSB is set, we copy from source.
 -- * otherwise, we copy from delta.
 -- * extensions are not handled.
+deltaParse :: P.Parser Delta
 deltaParse = do
     srcSize <- getDeltaHdrSize
     resSize <- getDeltaHdrSize

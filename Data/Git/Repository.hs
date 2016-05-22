@@ -75,6 +75,7 @@ data InvalidType = InvalidType Ref ObjectType
 instance Exception InvalidType
 
 -- should be a standard function that do that...
+mapJustM :: Monad m => (t -> m (Maybe a)) -> Maybe t -> m (Maybe a)
 mapJustM f (Just o) = f o
 mapJustM _ Nothing  = return Nothing
 

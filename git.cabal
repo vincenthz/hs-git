@@ -75,7 +75,8 @@ Library
                      Data.Git.Path
                      Data.Git.Parser
                      Data.Git.WorkTree
-  ghc-options:       -Wall -fno-warn-unused-imports -fno-warn-missing-signatures
+  ghc-options:       -Wall -fno-warn-unused-imports
+ -- -fno-warn-missing-signatures
 
 
 Test-Suite test-unit

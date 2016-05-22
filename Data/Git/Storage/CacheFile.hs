@@ -20,8 +20,6 @@ data CacheFile a = CacheFile
     , cacheLock     :: MVar (MTime, a)
     }
 
-timeZero = 0
-
 newCacheVal :: LocalPath -> IO a -> a -> IO (CacheFile a)
 newCacheVal path refresh initialVal =
     CacheFile path refresh initialVal <$> newMVar (MTime timeZero, initialVal)
@@ -35,4 +33,5 @@ getCacheVal cachefile = modifyMVar (cacheLock cachefile) getOrRefresh
                   Just newMtime | newMtime > mtime -> cacheRefresh cachefile >>= \v -> return ((newMtime, v), v)
                                 | otherwise        -> return (s, cachedVal)
 
+tryGetMTime :: LocalPath -> IO (Maybe MTime)
 tryGetMTime filepath = (Just <$> getMTime filepath) `E.catch` \(_ :: E.SomeException) -> return Nothing

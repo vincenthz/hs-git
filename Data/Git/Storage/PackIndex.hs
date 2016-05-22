@@ -28,6 +28,7 @@ module Data.Git.Storage.PackIndex
 import Data.List
 import Data.Bits
 import Data.Word
+import Data.ByteString (ByteString)
 
 import Data.Vector (Vector, (!))
 import qualified Data.Vector as V
@@ -53,6 +54,7 @@ data PackIndex = PackIndex
         }
 
 -- | enumerate every indexes file in the pack directory
+packIndexEnumerate :: LocalPath -> IO [Ref]
 packIndexEnumerate repoPath = map onlyHash . filter isPackFile <$> listDirectoryFilename (repoPath </> "objects" </> "pack")
   where
         isPackFile :: String -> Bool
@@ -69,6 +71,7 @@ packIndexClose :: FileReader -> IO ()
 packIndexClose = fileReaderClose
 
 -- | variant of withFile on the index file and with a FileReader
+withPackIndex :: LocalPath -> Ref -> (FileReader -> IO a) -> IO a
 withPackIndex repoPath indexRef = withFileReader (indexPath repoPath indexRef)
 
 -- | returns the number of references, referenced in this index.
@@ -133,6 +136,7 @@ packIndexGetReferencesWithPrefix idxHdr fr prefix =
                 refprefix   = read ("0x" ++ take 2 prefix)
 
 -- | returns absolute offset in the index file of the sha1s, the crcs and the packfiles offset.
+packIndexOffsets :: PackIndexHeader -> (Word32, Word32, Word32)
 packIndexOffsets idx = (packIndexSha1sOffset, packIndexCRCsOffset, packIndexPackOffOffset)
         where
                 packIndexPackOffOffset = packIndexCRCsOffset + crcsTableSz
@@ -143,6 +147,7 @@ packIndexOffsets idx = (packIndexSha1sOffset, packIndexCRCsOffset, packIndexPack
                 sz                 = packIndexHeaderGetSize idx
 
 -- | parse index header
+parsePackIndexHeader :: P.Parser PackIndexHeader
 parsePackIndexHeader = do
         magic   <- P.word32
         when (magic /= 0xff744f63) $ error "wrong magic number for packIndex"
@@ -160,6 +165,7 @@ packIndexGetHeader :: LocalPath -> Ref -> IO PackIndexHeader
 packIndexGetHeader repoPath indexRef = withPackIndex repoPath indexRef $ packIndexReadHeader
 
 -- | read all index
+packIndexRead :: LocalPath -> Ref -> IO (PackIndexHeader, (Vector Ref, Vector Word32, Vector Word32, [ByteString], Ref, Ref))
 packIndexRead repoPath indexRef = do
         withPackIndex repoPath indexRef $ \fr -> do
                 idx <- fileReaderParse fr parsePackIndexHeader

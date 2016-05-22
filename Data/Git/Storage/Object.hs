@@ -165,15 +165,18 @@ modeperm :: P.Parser ModePerm
 modeperm = ModePerm . fromIntegral <$> octal
 
 -- | parse a tree content
+treeParse :: P.Parser Tree
 treeParse = Tree <$> parseEnts
     where parseEnts = P.hasMore >>= \b -> if b then liftM2 (:) parseEnt parseEnts else return []
           parseEnt = liftM3 (,,) modeperm parseEntName (P.byte 0 >> P.referenceBin)
           parseEntName = entName <$> (P.skipASCII ' ' >> P.takeWhile (/= 0))
 
 -- | parse a blob content
+blobParse :: P.Parser Blob
 blobParse = (Blob . L.fromChunks . (:[]) <$> P.takeAll)
 
 -- | parse a commit content
+commitParse :: P.Parser Commit
 commitParse = do
         tree <- P.string "tree " >> P.referenceHex
         P.skipEOL
@@ -202,6 +205,7 @@ commitParse = do
                 concatLines = B.concat . intersperse (B.pack [0xa])
 
 -- | parse a tag content
+tagParse :: P.Parser Tag
 tagParse = do
         object <- P.string "object " >> P.referenceHex
         P.skipEOL
@@ -214,6 +218,7 @@ tagParse = do
         signature <- P.takeAll
         return $ Tag object type_ tag tagger signature
 
+parsePerson :: P.Parser Person
 parsePerson = do
         name <- B.init <$> P.takeUntilASCII '<'
         P.skipASCII '<'
@@ -228,6 +233,7 @@ parsePerson = do
         P.skipEOL
         return $ Person name email (gitTime time timezone)
 
+ascii :: Char -> P.Parser ()
 ascii c = P.byte (asciiChar c)
 
 asciiChar :: Char -> Word8
@@ -236,6 +242,7 @@ asciiChar c
     | otherwise = error ("char " <> show c <> " not valid ASCII")
   where cp = fromEnum c
 
+objectParseTree, objectParseCommit, objectParseTag, objectParseBlob :: P.Parser Object
 objectParseTree   = ObjTree <$> treeParse
 objectParseCommit = ObjCommit <$> commitParse
 objectParseTag    = ObjTag <$> tagParse
@@ -252,6 +259,7 @@ objectWrite (ObjBlob blob)     = blobWrite blob
 objectWrite (ObjTree tree)     = treeWrite tree
 objectWrite _                  = error "delta cannot be marshalled"
 
+treeWrite :: Tree -> L.ByteString
 treeWrite (Tree ents) = toLazyByteString $ mconcat $ concatMap writeTreeEnt ents
     where writeTreeEnt (ModePerm perm,name,ref) =
                 [ string7 (printf "%o" perm)
@@ -261,6 +269,7 @@ treeWrite (Tree ents) = toLazyByteString $ mconcat $ concatMap writeTreeEnt ents
                 , byteString $ toBinary ref
                 ]
 
+commitWrite :: Commit -> L.ByteString
 commitWrite (Commit tree parents author committer encoding extra msg) =
     toLazyByteString $ mconcat els
     where
@@ -283,6 +292,7 @@ commitWrite (Commit tree parents author committer encoding extra msg) =
                 ,byteString msg
                 ]
 
+tagWrite :: Tag -> L.ByteString
 tagWrite (Tag ref ty tag tagger signature) =
     toLazyByteString $ mconcat els
     where els = [ string7 "object ", byteString (toHex ref), eol
@@ -293,8 +303,10 @@ tagWrite (Tag ref ty tag tagger signature) =
                 , byteString signature
                 ]
 
+eol :: Builder
 eol = string7 "\n"
 
+blobWrite :: Blob -> L.ByteString
 blobWrite (Blob bData) = bData
 
 instance Objectable Blob where
@@ -337,6 +349,7 @@ objectHash :: ObjectType -> Word64 -> L.ByteString -> Ref
 objectHash ty w lbs = hashLBS $ L.fromChunks (objectWriteHeader ty w : L.toChunks lbs)
 
 -- used for objectWrite for commit and tag
+writeName :: ByteString -> Person -> ByteString
 writeName label (Person name email locTime) =
         B.concat [label, " ", name, " <", email, "> ", BC.pack timeStr]
   where timeStr = show locTime

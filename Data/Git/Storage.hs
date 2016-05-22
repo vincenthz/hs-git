@@ -141,6 +141,7 @@ findRepo = do
             if e then return filepath else checkDir (n+1) (if absolute wd then parent wd else wd </> "..")
 
 -- | execute a function f with a git context.
+withRepo :: LocalPath -> (Git -> IO c) -> IO c
 withRepo path f = bracket (openRepo path) closeRepo f
 
 -- | execute a function on the current repository.
@@ -187,6 +188,9 @@ setDescription git desc = do
     writeTextFile descriptionPath desc
   where descriptionPath = (gitRepoPath git) </> "description"
 
+iterateIndexes :: Git
+               -> (b -> (Ref, PackIndexReader) -> IO (b, Bool))
+               -> b -> IO b
 iterateIndexes git f initAcc = do
     allIndexes    <- packIndexEnumerate (gitRepoPath git)
     readers       <- readIORef (indexReaders git)

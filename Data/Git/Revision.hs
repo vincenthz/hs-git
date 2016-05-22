@@ -87,11 +87,13 @@ revFromString s = either (error.show) fst $ runStream parser s
             RevModAtDate <$> many (noneOf "}")
 
 -- combinator
-char c = eatRet (\x -> if x == c then Just c else Nothing)
-string s = prefix (\x -> if isPrefixOf s x then Just (s, length s) else Nothing)
-digit = eatRet (\x -> if isDigit x then Just x else Nothing)
-noneOf l = eatRet (\x -> if not (x `elem` l) then Just x else Nothing)
 
+        char c = eatRet (\x -> if x == c then Just c else Nothing)
+        string str = prefix (\x -> if isPrefixOf str x then Just (str, length str) else Nothing)
+        digit = eatRet (\x -> if isDigit x then Just x else Nothing)
+        noneOf l = eatRet (\x -> if not (x `elem` l) then Just x else Nothing)
+
+prefix :: ([elem] -> Maybe (a, Int)) -> Stream elem a
 prefix predicate = Stream $ \el ->
     case el of
         [] -> Left ("empty stream: prefix")
@@ -108,14 +110,6 @@ eatRet predicate = Stream $ \el ->
             case predicate x of
                 Just a  -> Right (a, xs)
                 Nothing -> Left ("unexpected atom got: " ++ show x)
-
-eat :: Show elem => (elem -> Bool) -> Stream elem ()
-eat predicate = Stream $ \el ->
-    case el of
-        [] -> Left ("empty stream: eating")
-        x:xs
-            | predicate x -> Right ((), xs)
-            | otherwise   -> Left ("unexpected atom got: " ++ show x)
 
 newtype Stream elem a = Stream { runStream :: [elem] -> Either String (a, [elem]) }
 instance Functor (Stream elem) where

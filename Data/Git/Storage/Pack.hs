@@ -55,6 +55,7 @@ data PackedObjectInfo = PackedObjectInfo
         } deriving (Show,Eq)
 
 -- | Enumerate the pack refs available in this repository.
+packEnumerate :: LocalPath -> IO [Ref]
 packEnumerate repoPath = map onlyHash . filter isPackFile <$> listDirectoryFilename (repoPath </> "objects" </> "pack")
   where
         isPackFile :: String -> Bool
@@ -71,6 +72,7 @@ packClose :: FileReader -> IO ()
 packClose = fileReaderClose
 
 -- | return the number of entries in this pack
+packReadHeader :: LocalPath -> Ref -> IO Word32
 packReadHeader repoPath packRef =
         withFileReader (packPath repoPath packRef) $ \filereader ->
                 fileReaderParse filereader parseHeader
@@ -82,6 +84,7 @@ packReadHeader repoPath packRef =
                 P.word32
 
 -- | read an object at a specific position using a map function on the objectData
+packReadMapAtOffset :: FileReader -> Word64 -> (L.ByteString -> L.ByteString) -> IO (Maybe Object)
 packReadMapAtOffset fr offset mapData = fileReaderSeek fr offset >> getNextObject fr mapData
 
 -- | read an object at a specific position
@@ -93,6 +96,7 @@ packReadRawAtOffset :: FileReader -> Word64 -> IO (PackedObjectRaw)
 packReadRawAtOffset fr offset = fileReaderSeek fr offset >> getNextObjectRaw fr
 
 -- | enumerate all objects in this pack and callback to f for reach raw objects
+packEnumerateObjects :: LocalPath -> Ref -> Int -> (PackedObjectRaw -> IO a) -> IO ()
 packEnumerateObjects repoPath packRef entries f =
         withFileReader (packPath repoPath packRef) $ \filebuffer -> do
                 fileReaderSeek filebuffer 12
@@ -106,9 +110,11 @@ getNextObject :: FileReader -> (L.ByteString -> L.ByteString) -> IO (Maybe Objec
 getNextObject fr mapData =
         packedObjectToObject . second mapData <$> getNextObjectRaw fr
 
+packedObjectToObject :: (PackedObjectInfo, L.ByteString) -> Maybe Object
 packedObjectToObject (PackedObjectInfo { poiType = ty, poiExtra = extra }, objData) =
         packObjectFromRaw (ty, extra, objData)
 
+packObjectFromRaw :: (ObjectType, Maybe ObjectPtr, L.ByteString) -> Maybe Object
 packObjectFromRaw (TypeCommit, Nothing, objData) = P.maybeParseChunks objectParseCommit (L.toChunks objData)
 packObjectFromRaw (TypeTree, Nothing, objData)   = P.maybeParseChunks objectParseTree (L.toChunks objData)
 packObjectFromRaw (TypeBlob, Nothing, objData)   = P.maybeParseChunks objectParseBlob (L.toChunks objData)

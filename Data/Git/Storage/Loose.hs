@@ -57,6 +57,7 @@ readZippedFile fp = Zipped <$> readBinaryFileLazy fp
 dezip :: Zipped -> L.ByteString
 dezip = decompress . getZippedData
 
+isObjectPrefix :: [Char] -> Bool
 isObjectPrefix [a,b] = isHexDigit a && isHexDigit b
 isObjectPrefix _     = False
 
@@ -70,6 +71,7 @@ parseHeader = do
 
 data HeaderType = HeaderTree | HeaderTag | HeaderCommit | HeaderBlob
 
+parseTreeHeader, parseTagHeader, parseCommitHeader, parseBlobHeader :: P.Parser HeaderType
 parseTreeHeader   = P.string "tree " >> parseLength >> P.byte 0 >> return HeaderTree
 parseTagHeader    = P.string "tag " >> parseLength >> P.byte 0 >> return HeaderTag
 parseCommitHeader = P.string "commit " >> parseLength >> P.byte 0 >> return HeaderCommit
@@ -77,13 +79,6 @@ parseBlobHeader   = P.string "blob " >> parseLength >> P.byte 0 >> return Header
 
 parseLength :: P.Parser Int
 parseLength = P.decimal
-
-{-
-parseTree   = parseTreeHeader >> objectParseTree
-parseTag    = parseTagHeader >> objectParseTag
-parseCommit = parseCommitHeader >> objectParseCommit
-parseBlob   = parseBlobHeader >> objectParseBlob
--}
 
 parseObject :: L.ByteString -> Object
 parseObject = parseSuccess getOne
@@ -122,6 +117,7 @@ looseUnmarshallZippedRaw :: Zipped -> (ObjectHeader, ObjectData)
 looseUnmarshallZippedRaw = looseUnmarshallRaw . dezip
 
 -- | read a specific ref from a loose object and returns an header and data.
+looseReadRaw :: LocalPath -> Ref -> IO (ObjectHeader, ObjectData)
 looseReadRaw repoPath ref = looseUnmarshallZippedRaw <$> readZippedFile (objectPathOfRef repoPath ref)
 
 -- | read only the header of a loose object.
@@ -131,12 +127,15 @@ looseReadHeader repoPath ref = toHeader <$> readZippedFile (objectPathOfRef repo
     toHeader = either (error . ("parseHeader: " ++)) id . P.eitherParseChunks parseHeader . L.toChunks . dezip
 
 -- | read a specific ref from a loose object and returns an object
+looseRead :: LocalPath -> Ref -> IO Object
 looseRead repoPath ref = looseUnmarshallZipped <$> readZippedFile (objectPathOfRef repoPath ref)
 
 -- | check if a specific ref exists as loose object
+looseExists :: LocalPath -> Ref -> IO Bool
 looseExists repoPath ref = isFile (objectPathOfRef repoPath ref)
 
 -- | enumarate all prefixes available in the object store.
+looseEnumeratePrefixes :: LocalPath -> IO [[Char]]
 looseEnumeratePrefixes repoPath = filter isObjectPrefix <$> getDirectoryContents (repoPath </> fromString "objects")
 
 -- | enumerate all references available with a specific prefix.
@@ -152,6 +151,7 @@ looseEnumerateWithPrefix repoPath prefix =
         looseEnumerateWithPrefixFilter repoPath prefix (const True)
 
 -- | marshall as lazy bytestring an object except deltas.
+looseMarshall :: Object -> L.ByteString
 looseMarshall obj
         | objectIsDelta obj = error "cannot write delta object loose"
         | otherwise         = L.concat [ L.fromChunks [hdrB], objData ]
@@ -161,6 +161,7 @@ looseMarshall obj
 
 -- | create a new blob on a temporary location and on success move it to
 -- the object store with its digest name.
+looseWriteBlobFromFile :: LocalPath -> LocalPath -> IO Ref
 looseWriteBlobFromFile repoPath file = do
         fsz <- getSize file
         let hdr = objectWriteHeader TypeBlob (fromIntegral fsz)
@@ -183,6 +184,7 @@ looseWriteBlobFromFile repoPath file = do
 
 -- | write an object to disk as a loose reference.
 -- use looseWriteBlobFromFile for efficiently writing blobs when being commited from a file.
+looseWrite :: LocalPath -> Object -> IO Ref
 looseWrite repoPath obj = createParentDirectory path
                        >> isFile path
                        >>= \exists -> unless exists (writeFileLazy path $ compress content)
@@ -193,4 +195,5 @@ looseWrite repoPath obj = createParentDirectory path
                 ref     = hashLBS content
                 writeFileLazy p bs = withFile p WriteMode (\h -> L.hPut h bs)
 
+getDirectoryContents :: LocalPath -> IO [String]
 getDirectoryContents p = listDirectoryFilename p

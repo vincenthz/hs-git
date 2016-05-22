@@ -63,7 +63,10 @@ data RefNotFound = RefNotFound Ref
 instance Exception RefInvalid
 instance Exception RefNotFound
 
+isHex :: ByteString -> Bool
 isHex = and . map isHexDigit . BC.unpack
+
+isHexString :: String -> Bool
 isHexString = and . map isHexDigit
 
 -- | take a hexadecimal bytestring that represent a reference

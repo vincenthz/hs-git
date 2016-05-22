@@ -61,9 +61,13 @@ parseConfig = Config . reverse . toSections . foldl accSections ([], Nothing) . 
         strip s = dropSpaces $ reverse $ dropSpaces $ reverse s
           where dropSpaces = dropWhile (\c -> c == ' ' || c == '\t')
 
+readConfigPath :: LocalPath -> IO Config
 readConfigPath filepath = parseConfig <$> readTextFile filepath
+
+readConfig :: LocalPath -> IO Config
 readConfig gitRepo = readConfigPath (configPath gitRepo)
 
+readGlobalConfig :: IO Config
 readGlobalConfig = getHomeDirectory >>= readConfigPath . (\homeDir -> homeDir </> ".gitconfig")
 
 listSections :: [Config] -> [String]

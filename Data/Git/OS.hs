@@ -33,6 +33,7 @@ module Data.Git.OS
     , valid
     , getSize
     , MTime(..)
+    , timeZero
     , getMTime
     , withFile
     , rename
@@ -60,19 +61,28 @@ import qualified Data.ByteString.Lazy as L
 
 type LocalPath = FilePath
 
+listDirectoryFilename :: LocalPath -> IO [String]
 listDirectoryFilename dir =
      map (Rules.encodeString Rules.posix . filename) <$> listDirectory dir
 
+createParentDirectory :: LocalPath -> IO ()
 createParentDirectory filepath = createTree $ parent filepath
 
+readTextFile :: LocalPath -> IO String
 readTextFile filepath = Prelude.readFile (encodeString filepath)
 
+writeTextFile :: LocalPath -> String -> IO ()
 writeTextFile filepath = Prelude.writeFile (encodeString filepath)
 
 newtype MTime = MTime EpochTime deriving (Eq,Ord)
 
+timeZero :: EpochTime
+timeZero = 0
+
+getMTime :: LocalPath -> IO MTime
 getMTime filepath = MTime . modificationTime <$> getFileStatus (encodeString filepath)
 
+getEnvAsPath :: String -> IO LocalPath
 getEnvAsPath envName = Rules.decodeString Rules.posix <$> getEnv envName
 
 localPathDecode :: B.ByteString -> LocalPath

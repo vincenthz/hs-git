@@ -32,9 +32,10 @@ module Data.Git.Parser
     ) where
 
 import qualified Data.ByteArray.Parse as P
+import           Data.ByteArray (ByteArray)
 
 import           Data.Bits
-import           Data.Word (Word8)
+import           Data.Word (Word8, Word32)
 import           Data.Char (isDigit)
 
 import qualified Data.ByteString as B
@@ -52,8 +53,10 @@ vlf = do
     l  <- P.anyByte
     return $ (map (\w -> w `clearBit` 7) $ B.unpack bs) ++ [l]
 
+word32 :: Parser Word32
 word32 = be32 <$> P.take 4
 
+ref, referenceBin, referenceHex :: Parser Ref
 ref = referenceBin
 referenceBin = fromBinary <$> P.take 20
 referenceHex = fromHex <$> P.take 40
@@ -77,6 +80,7 @@ maybeParseChunks p (i:is) = loop (P.parse p i) is
     loop (P.ParseMore c) (x:xs) = loop (c $ Just x) xs
     loop _               _      = Nothing
 
+toMaybe :: P.Result t a -> Maybe a
 toMaybe (P.ParseOK _ a) = Just a
 toMaybe (P.ParseMore c) = toMaybe (c Nothing)
 toMaybe _               = Nothing
@@ -93,10 +97,12 @@ eitherParseChunks p (i:is) = loop (P.parse p i) is
     loop (P.ParseMore c) (x:xs) = loop (c $ Just x) xs
     loop ps              l      = Left ("eitherParseChunk: error: " <> show ps <> " : " <> show l)
 
+toEither :: P.Result t b -> Either String b
 toEither (P.ParseOK _ a) = Right a
 toEither (P.ParseFail e) = Left e
 toEither (P.ParseMore c) = toEither (c Nothing)
 
+takeUntilASCII :: ByteArray byteArray => Char -> P.Parser byteArray byteArray
 takeUntilASCII char = P.takeWhile (\c -> if fromEnum c < 0x80 then fromEnum c /= fromEnum char else True)
 
 tillEOL :: Parser B.ByteString
@@ -115,6 +121,7 @@ skipASCII c
 asciiEOL :: Word8
 asciiEOL = fromIntegral $ fromEnum '\n'
 
+isByte :: ByteArray byteArray => (Word8 -> Bool) -> P.Parser byteArray Word8
 isByte predicate = do
     b <- P.anyByte
     if predicate b then return b else fail "isByte"

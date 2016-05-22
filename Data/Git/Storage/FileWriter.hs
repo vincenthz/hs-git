@@ -16,6 +16,7 @@ import Control.Exception (bracket)
 
 import Crypto.Hash
 
+defaultCompression :: Int
 defaultCompression = 6
 
 -- this is a copy of modifyIORef' found in base 4.6 (ghc 7.6),
@@ -32,6 +33,7 @@ data FileWriter = FileWriter
         , writerDigest  :: IORef (Context SHA1)
         }
 
+fileWriterNew :: Handle -> IO FileWriter
 fileWriterNew handle = do
         deflate <- initDeflate defaultCompression defaultWindowBits
         digest  <- newIORef hashInit
@@ -41,17 +43,22 @@ fileWriterNew handle = do
                 , writerDigest  = digest
                 }
 
+withFileWriter :: LocalPath -> (FileWriter -> IO c) -> IO c
 withFileWriter path f =
         bracket (openFile path WriteMode) (hClose) $ \handle ->
                 bracket (fileWriterNew handle) (fileWriterClose) f
 
+postDeflate :: Handle -> Maybe B.ByteString -> IO ()
 postDeflate handle = maybe (return ()) (B.hPut handle)
 
+fileWriterOutput :: FileWriter -> B.ByteString -> IO ()
 fileWriterOutput (FileWriter { writerHandle = handle, writerDigest = digest, writerDeflate = deflate }) bs = do
         modifyIORefStrict digest (\ctx -> hashUpdate ctx bs)
         (>>= postDeflate handle) =<< feedDeflate deflate bs
 
+fileWriterClose :: FileWriter -> IO ()
 fileWriterClose (FileWriter { writerHandle = handle, writerDeflate = deflate }) =
         postDeflate handle =<< finishDeflate deflate
 
+fileWriterGetDigest :: FileWriter -> IO Ref
 fileWriterGetDigest (FileWriter { writerDigest = digest }) = (fromDigest . hashFinalize) `fmap` readIORef digest
