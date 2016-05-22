@@ -28,7 +28,6 @@ module Data.Git.Storage.PackIndex
 import Data.List
 import Data.Bits
 import Data.Word
-import Data.String
 
 import Data.Vector (Vector, (!))
 import qualified Data.Vector as V
@@ -170,7 +169,7 @@ packIndexRead repoPath indexRef = do
                 crcs      <- V.replicateM (fromIntegral sz) P.word32
                 packoffs  <- V.replicateM (fromIntegral sz) P.word32
                 let nbLarge = length $ filter (== True) $ map (\packoff -> packoff `testBit` 31) $ V.toList packoffs
-                largeoffs <- replicateM nbLarge (P.takeBytes 4)
+                largeoffs <- replicateM nbLarge (P.take 4)
                 packfileChecksum <- P.referenceBin
                 idxfileChecksum  <- P.referenceBin
                 -- large packfile offsets

@@ -109,12 +109,12 @@ getNextObject fr mapData =
 packedObjectToObject (PackedObjectInfo { poiType = ty, poiExtra = extra }, objData) =
         packObjectFromRaw (ty, extra, objData)
 
-packObjectFromRaw (TypeCommit, Nothing, objData) = P.maybeParseChunks objectParseCommit objData
-packObjectFromRaw (TypeTree, Nothing, objData)   = P.maybeParseChunks objectParseTree objData
-packObjectFromRaw (TypeBlob, Nothing, objData)   = P.maybeParseChunks objectParseBlob objData
-packObjectFromRaw (TypeTag, Nothing, objData)    = P.maybeParseChunks objectParseTag objData
-packObjectFromRaw (TypeDeltaOff, Just (PtrOfs o), objData) = toObject . DeltaOfs o <$> deltaRead objData
-packObjectFromRaw (TypeDeltaRef, Just (PtrRef r), objData) = toObject . DeltaRef r <$> deltaRead objData
+packObjectFromRaw (TypeCommit, Nothing, objData) = P.maybeParseChunks objectParseCommit (L.toChunks objData)
+packObjectFromRaw (TypeTree, Nothing, objData)   = P.maybeParseChunks objectParseTree (L.toChunks objData)
+packObjectFromRaw (TypeBlob, Nothing, objData)   = P.maybeParseChunks objectParseBlob (L.toChunks objData)
+packObjectFromRaw (TypeTag, Nothing, objData)    = P.maybeParseChunks objectParseTag (L.toChunks objData)
+packObjectFromRaw (TypeDeltaOff, Just (PtrOfs o), objData) = toObject . DeltaOfs o <$> deltaRead (L.toChunks objData)
+packObjectFromRaw (TypeDeltaRef, Just (PtrRef r), objData) = toObject . DeltaRef r <$> deltaRead (L.toChunks objData)
 packObjectFromRaw _                              = error "can't happen unless someone change getNextObjectRaw"
 
 getNextObjectRaw :: FileReader -> IO PackedObjectRaw
@@ -131,12 +131,12 @@ getNextObjectRaw fr = do
         return (PackedObjectInfo ty sobj (eobj - sobj) size extra, objData)
         where
                 parseObjectHeader = do
-                        (m, ty, sz) <- splitFirst <$> P.anyWord8
+                        (m, ty, sz) <- splitFirst <$> P.anyByte
                         size <- if m then (sz +) <$> getNextSize 4 else return sz
                         return (ty, size)
                         where
                                 getNextSize n = do
-                                        (c, sz) <- splitOther n <$> P.anyWord8
+                                        (c, sz) <- splitOther n <$> P.anyByte
                                         if c then (sz +) <$> getNextSize (n+7) else return sz
 
                                 splitFirst :: Word8 -> (Bool, ObjectType, Word64)

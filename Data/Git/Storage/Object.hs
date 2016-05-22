@@ -51,9 +51,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as L
 
-import Data.Attoparsec.Lazy
-import qualified Data.Attoparsec.Char8 as PC
-
 import Data.List (intersperse)
 import Data.Word
 import Text.Printf
@@ -159,22 +156,22 @@ objectToBlob :: Object -> Maybe Blob
 objectToBlob (ObjBlob blob) = Just blob
 objectToBlob _              = Nothing
 
-octal :: Parser Int
-octal = B.foldl' step 0 `fmap` takeWhile1 isOct
+octal :: P.Parser Int
+octal = B.foldl' step 0 `fmap` P.takeWhile1 isOct
   where isOct w = w >= 0x30 && w <= 0x37
         step a w = a * 8 + fromIntegral (w - 0x30)
 
-modeperm :: Parser ModePerm
+modeperm :: P.Parser ModePerm
 modeperm = ModePerm . fromIntegral <$> octal
 
 -- | parse a tree content
 treeParse = Tree <$> parseEnts
-    where parseEnts = atEnd >>= \end -> if end then return [] else liftM2 (:) parseEnt parseEnts
-          parseEnt = liftM3 (,,) modeperm parseEntName (word8 0 >> P.referenceBin)
-          parseEntName = entName <$> (P.skipASCII ' ' >> takeTill ((==) 0))
+    where parseEnts = P.hasMore >>= \b -> if b then liftM2 (:) parseEnt parseEnts else return []
+          parseEnt = liftM3 (,,) modeperm parseEntName (P.byte 0 >> P.referenceBin)
+          parseEntName = entName <$> (P.skipASCII ' ' >> P.takeWhile (/= 0))
 
 -- | parse a blob content
-blobParse = (Blob <$> takeLazyByteString)
+blobParse = (Blob . L.fromStrict <$> P.takeAll)
 
 -- | parse a commit content
 commitParse = do
@@ -183,10 +180,10 @@ commitParse = do
         parents   <- many parseParentRef
         author    <- P.string "author " >> parsePerson
         committer <- P.string "committer " >> parsePerson
-        encoding  <- option Nothing $ Just <$> (P.string "encoding " >> P.tillEOL)
+        encoding  <- optional (P.string "encoding " >> P.tillEOL)
         extras    <- many parseExtra
         P.skipEOL
-        message <- takeByteString
+        message <- P.takeAll
         return $ Commit tree parents author committer encoding extras message
         where
                 parseParentRef = do
@@ -194,24 +191,27 @@ commitParse = do
                         P.skipEOL
                         return tree
                 parseExtra = do
-                        f <- B.singleton <$> notWord8 0xa
-                        r <- P.tillEOL
-                        P.skipEOL
-                        v <- concatLines <$> many (P.string " " *> P.tillEOL <* P.skipEOL)
-                        return $ CommitExtra (f `B.append` r) v
+                        b <- P.anyByte
+                        if b == 0xa
+                            then fail "no extra"
+                            else do
+                                r <- P.tillEOL
+                                P.skipEOL
+                                v <- concatLines <$> many (P.string " " *> P.tillEOL <* P.skipEOL)
+                                return $ CommitExtra (b `B.cons` r) v
                 concatLines = B.concat . intersperse (B.pack [0xa])
 
 -- | parse a tag content
 tagParse = do
         object <- P.string "object " >> P.referenceHex
         P.skipEOL
-        type_ <- objectTypeUnmarshall <$> (P.string "type " >> takeTill ((==) 0x0a))
+        type_ <- objectTypeUnmarshall <$> (P.string "type " >> P.tillEOL)
         P.skipEOL
         tag   <- P.string "tag " >> P.tillEOL -- PC.takeTill ((==) 0x0a)
         P.skipEOL
         tagger <- P.string "tagger " >> parsePerson
         P.skipEOL
-        signature <- takeByteString
+        signature <- P.takeAll
         return $ Tag object type_ tag tagger signature
 
 parsePerson = do
@@ -219,14 +219,22 @@ parsePerson = do
         P.skipASCII '<'
         email <- P.takeUntilASCII '>'
         _ <- P.string "> "
-        time <- PC.decimal :: Parser Integer
+        time <- P.decimal :: P.Parser Integer
         _ <- P.string " "
-        timezoneFmt  <- PC.signed PC.decimal
-        let timezoneSign = if timezoneFmt < 0 then negate else id
-        let (h,m)    = abs timezoneFmt `divMod` 100
-            timezone = timezoneSign (h * 60 + m)
+        timezoneSign <- maybe 1 id <$> optional ((const 1 <$> ascii '+') <|> (const (-1) <$> ascii '-'))
+        timezoneFmt  <- P.decimal
+        let (h,m)    = timezoneFmt `divMod` 100
+            timezone = timezoneSign * (h * 60 + m)
         P.skipEOL
         return $ Person name email (gitTime time timezone)
+
+ascii c = P.byte (asciiChar c)
+
+asciiChar :: Char -> Word8
+asciiChar c
+    | cp < 0x80 = fromIntegral cp
+    | otherwise = error ("char " <> show c <> " not valid ASCII")
+  where cp = fromEnum c
 
 objectParseTree   = ObjTree <$> treeParse
 objectParseCommit = ObjCommit <$> commitParse

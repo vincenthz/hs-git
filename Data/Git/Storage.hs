@@ -63,6 +63,7 @@ import Data.Git.Storage.Loose
 import Data.Git.Storage.CacheFile
 import Data.Git.Ref
 import Data.Git.Config
+import qualified Data.ByteString.Lazy as L
 
 import qualified Data.Map as M
 
@@ -273,12 +274,12 @@ readFromPack git pref o resolveDelta = do
         resolve reader offset (po, objData) = do
             case (poiType po, poiExtra po) of
                 (TypeDeltaOff, Just ptr@(PtrOfs doff)) -> do
-                    let delta = deltaRead objData
+                    let delta = deltaRead (L.toChunks objData)
                     let noffset = offset - doff
                     base <- resolve reader noffset =<< packReadRawAtOffset reader noffset
                     return $ addToChain ptr $ applyDelta delta base
                 (TypeDeltaRef, Just ptr@(PtrRef bref)) -> do
-                    let delta = deltaRead objData
+                    let delta = deltaRead (L.toChunks objData)
                     base <- getObjectRaw git bref True
                     return $ addToChain ptr $ applyDelta delta base
                 _ ->

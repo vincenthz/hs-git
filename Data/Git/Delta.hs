@@ -39,7 +39,7 @@ data DeltaCmd =
 deltaParse = do
     srcSize <- getDeltaHdrSize
     resSize <- getDeltaHdrSize
-    dcmds   <- many (P.anyWord8 >>= parseWithCmd)
+    dcmds   <- many (P.anyByte >>= parseWithCmd)
     return $ Delta srcSize resSize dcmds
   where
         getDeltaHdrSize = unbytes 0 <$> P.vlf
@@ -52,20 +52,21 @@ deltaParse = do
             | cmd `testBit` 7 = do
                 o1 <- word8cond (cmd `testBit` 0) 0
                 o2 <- word8cond (cmd `testBit` 1) 8
-                o3 <- word8cond (cmd `testBit` 2) 16 
+                o3 <- word8cond (cmd `testBit` 2) 16
                 o4 <- word8cond (cmd `testBit` 3) 24
                 s1 <- word8cond (cmd `testBit` 4) 0
                 s2 <- word8cond (cmd `testBit` 5) 8
-                s3 <- word8cond (cmd `testBit` 6) 16 
+                s3 <- word8cond (cmd `testBit` 6) 16
                 let offset = o1 .|. o2 .|. o3 .|. o4
                 let size   = s1 .|. s2 .|. s3
                 return $ DeltaSrc offset (if size == 0 then 0x10000 else size)
-            | otherwise       = DeltaCopy <$> P.takeBytes (fromIntegral cmd)
+            | otherwise       = DeltaCopy <$> P.take (fromIntegral cmd)
         word8cond cond sh =
-            if cond then (flip shiftL sh . fromIntegral) <$> P.anyWord8 else return 0
+            if cond then (flip shiftL sh . fromIntegral) <$> P.anyByte else return 0
 
 -- | read one delta from a lazy bytestring.
-deltaRead = P.maybeParseChunks deltaParse
+deltaRead :: [ByteString] -> Maybe Delta
+deltaRead = P.maybeParseChunks deltaParse -- . L.toChunks
 
 -- | apply a delta on a lazy bytestring, returning a new bytestring.
 deltaApply :: L.ByteString -> Delta -> L.ByteString

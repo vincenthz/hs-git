@@ -61,25 +61,42 @@ isObjectPrefix [a,b] = isHexDigit a && isHexDigit b
 isObjectPrefix _     = False
 
 -- loose object parsing
+parseHeader :: P.Parser ObjectHeader
 parseHeader = do
         h <- P.takeWhile1 ((/=) 0x20)
-        _ <- P.word8 0x20
-        sz <- P.decimal
+        _ <- P.byte 0x20
+        sz <- P.decimal :: P.Parser Int
         return (objectTypeUnmarshall h, fromIntegral sz, Nothing)
 
-parseTreeHeader   = P.string "tree " >> P.decimal >> P.word8 0
-parseTagHeader    = P.string "tag " >> P.decimal >> P.word8 0
-parseCommitHeader = P.string "commit " >> P.decimal >> P.word8 0
-parseBlobHeader   = P.string "blob " >> P.decimal >> P.word8 0
+data HeaderType = HeaderTree | HeaderTag | HeaderCommit | HeaderBlob
 
+parseTreeHeader   = P.string "tree " >> parseLength >> P.byte 0 >> return HeaderTree
+parseTagHeader    = P.string "tag " >> parseLength >> P.byte 0 >> return HeaderTag
+parseCommitHeader = P.string "commit " >> parseLength >> P.byte 0 >> return HeaderCommit
+parseBlobHeader   = P.string "blob " >> parseLength >> P.byte 0 >> return HeaderBlob
+
+parseLength :: P.Parser Int
+parseLength = P.decimal
+
+{-
 parseTree   = parseTreeHeader >> objectParseTree
 parseTag    = parseTagHeader >> objectParseTag
 parseCommit = parseCommitHeader >> objectParseCommit
 parseBlob   = parseBlobHeader >> objectParseBlob
+-}
 
 parseObject :: L.ByteString -> Object
-parseObject = parseSuccess (parseTree <|> parseBlob <|> parseCommit <|> parseTag)
-        where parseSuccess p = either error id . P.eitherParseChunks  p
+parseObject = parseSuccess getOne
+  where
+    parseSuccess p = either (error . ("parseObject: " ++)) id . P.eitherParseChunks p . L.toChunks
+    getOne = do
+        hdrType <- parseTreeHeader <|> parseBlobHeader <|> parseCommitHeader <|> parseTagHeader
+        case hdrType of
+            HeaderTree   -> objectParseTree
+            HeaderTag    -> objectParseTag
+            HeaderCommit -> objectParseCommit
+            HeaderBlob   -> objectParseBlob
+
 
 -- | unmarshall an object (with header) from a bytestring.
 looseUnmarshall :: L.ByteString -> Object
@@ -96,7 +113,7 @@ looseUnmarshallRaw stream =
                 Nothing  -> error "object not right format. missing 0"
                 Just idx ->
                         let (h, r) = L.splitAt (idx+1) stream in
-                        case P.maybeResult $ P.parse parseHeader h of
+                        case P.maybeParseChunks parseHeader (L.toChunks h) of
                                 Nothing  -> error "cannot open object"
                                 Just hdr -> (hdr, r)
 
@@ -108,8 +125,10 @@ looseUnmarshallZippedRaw = looseUnmarshallRaw . dezip
 looseReadRaw repoPath ref = looseUnmarshallZippedRaw <$> readZippedFile (objectPathOfRef repoPath ref)
 
 -- | read only the header of a loose object.
+looseReadHeader :: LocalPath -> Ref -> IO ObjectHeader
 looseReadHeader repoPath ref = toHeader <$> readZippedFile (objectPathOfRef repoPath ref)
-        where toHeader = either error id . P.eitherParseChunks parseHeader . dezip
+  where
+    toHeader = either (error . ("parseHeader: " ++)) id . P.eitherParseChunks parseHeader . L.toChunks . dezip
 
 -- | read a specific ref from a loose object and returns an object
 looseRead repoPath ref = looseUnmarshallZipped <$> readZippedFile (objectPathOfRef repoPath ref)

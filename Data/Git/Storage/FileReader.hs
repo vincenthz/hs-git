@@ -51,7 +51,7 @@ data FileReader = FileReader
         { fbHandle     :: Handle
         , fbUseInflate :: Bool
         , fbInflate    :: Inflate
-        , fbRemaining  :: IORef ByteString
+        , fbRemaining  :: IORef (Maybe ByteString)
         , fbPos        :: IORef Word64
         }
 
@@ -62,7 +62,7 @@ instance E.Exception InflateException
 
 fileReaderNew :: Bool -> Handle -> IO FileReader
 fileReaderNew decompress handle = do
-        ref <- newIORef B.empty
+        ref <- newIORef (Just B.empty)
         pos <- newIORef 0
         inflate <- initInflate defaultWindowBits
         return $ FileReader handle decompress inflate ref pos
@@ -80,39 +80,44 @@ withFileReaderDecompress path f =
         bracket (openFile path ReadMode) (hClose) $ \handle ->
                 bracket (fileReaderNew True handle) (\_ -> return ()) f
 
-fileReaderGetNext :: FileReader -> IO ByteString
+fileReaderGetNext :: FileReader -> IO (Maybe ByteString)
 fileReaderGetNext fb = do
-        bs <- if fbUseInflate fb then inflateTillPop else B.hGet (fbHandle fb) 8192
-        modifyIORef (fbPos fb) (\pos -> pos + (fromIntegral $ B.length bs))
-        return bs
-        where inflateTillPop = do
-                b <- B.hGet (fbHandle fb) 4096
-                if B.null b
-                        then finishInflate (fbInflate fb)
-                        else (>>= maybe inflateTillPop return) =<< feedInflate (fbInflate fb) b
+    bs <- if fbUseInflate fb then inflateTillPop else B.hGet (fbHandle fb) 8192
+    modifyIORef (fbPos fb) (\pos -> pos + (fromIntegral $ B.length bs))
+    return $ nothingOnNull bs
+  where
+    inflateTillPop = do
+        b <- B.hGet (fbHandle fb) 4096
+        if B.null b
+            then finishInflate (fbInflate fb)
+            else (>>= maybe inflateTillPop return) =<< feedInflate (fbInflate fb) b
+    nothingOnNull b
+        | B.null b  = Nothing
+        | otherwise = Just b
 
 fileReaderGetPos :: FileReader -> IO Word64
 fileReaderGetPos fr = do
-        storeLeft <- B.length <$> readIORef (fbRemaining fr)
-        pos       <- readIORef (fbPos fr)
-        return (pos - fromIntegral storeLeft)
+    storeLeft <- maybe 0 B.length <$> readIORef (fbRemaining fr)
+    pos       <- readIORef (fbPos fr)
+    return (pos - fromIntegral storeLeft)
 
 fileReaderFill :: FileReader -> IO ()
 fileReaderFill fb = fileReaderGetNext fb >>= writeIORef (fbRemaining fb)
 
 fileReaderGet :: Int -> FileReader -> IO [ByteString]
 fileReaderGet size fb@(FileReader { fbRemaining = ref }) = loop size
-        where loop left = do
-                b <- readIORef ref
-                if B.length b >= left
-                        then do
-                                let (b1, b2) = B.splitAt left b
-                                writeIORef ref b2
-                                return [b1]
-                        else do
-                                let nleft = left - B.length b
-                                fileReaderFill fb
-                                liftM (b :) (loop nleft)
+  where
+    loop left = do
+        b <- maybe B.empty id <$> readIORef ref
+        if B.length b >= left
+            then do
+                let (b1, b2) = B.splitAt left b
+                writeIORef ref (Just b2)
+                return [b1]
+            else do
+                let nleft = left - B.length b
+                fileReaderFill fb
+                liftM (b :) (loop nleft)
 
 fileReaderGetLBS :: Int -> FileReader -> IO L.ByteString
 fileReaderGetLBS size fb = L.fromChunks <$> fileReaderGet size fb
@@ -123,17 +128,17 @@ fileReaderGetBS size fb = B.concat <$> fileReaderGet size fb
 -- | seek in a handle, and reset the remaining buffer to empty.
 fileReaderSeek :: FileReader -> Word64 -> IO ()
 fileReaderSeek (FileReader { fbHandle = handle, fbRemaining = ref, fbPos = pos }) absPos = do
-        writeIORef ref B.empty >> writeIORef pos absPos >> hSeek handle AbsoluteSeek (fromIntegral absPos)
+        writeIORef ref (Just B.empty) >> writeIORef pos absPos >> hSeek handle AbsoluteSeek (fromIntegral absPos)
 
 -- | parse from a filebuffer
 fileReaderParse :: FileReader -> P.Parser a -> IO a
 fileReaderParse fr@(FileReader { fbRemaining = ref }) parseF = do
-        initBS <- readIORef ref
-        result <- P.parseWith (fileReaderGetNext fr) parseF initBS
-        case result of
-                P.Done remaining a -> writeIORef ref remaining >> return a
-                P.Partial _        -> error "parsing failed: partial with a handle, reached EOF ?"
-                P.Fail _ ctxs err  -> error ("parsing failed: " ++ show ctxs ++ " : " ++ show err)
+    initBS <- maybe B.empty id <$> readIORef ref
+    result <- P.parseFeed (fileReaderGetNext fr) parseF initBS
+    case result of
+        P.ParseOK remaining a -> writeIORef ref (Just remaining) >> return a
+        P.ParseMore _         -> error "parsing failed: partial with a handle, reached EOF ?"
+        P.ParseFail err       -> error ("parsing failed: " ++ err)
 
 -- | get a Variable Length Field. get byte as long as MSB is set, and one byte after
 fileReaderGetVLF :: FileReader -> IO [Word8]
@@ -152,9 +157,9 @@ fileReaderInflateToSize fb@(FileReader { fbRemaining = ref }) outputSize = do
                 rbs <- readIORef ref
                 let maxToInflate = min left (16 * 1024)
                 let lastBlock = if left == maxToInflate then True else False
-                (dbs,remaining) <- inflateToSize inflate (fromIntegral maxToInflate) lastBlock rbs (fileReaderGetNext fb)
+                (dbs,remaining) <- inflateToSize inflate (fromIntegral maxToInflate) lastBlock (maybe B.empty id rbs) (maybe B.empty id <$> fileReaderGetNext fb)
                                    `E.catch` augmentAndRaise left
-                writeIORef ref remaining
+                writeIORef ref (Just remaining)
                 let nleft = left - fromIntegral (B.length dbs)
                 if nleft > 0
                         then liftM (dbs:) (loop inflate nleft)
