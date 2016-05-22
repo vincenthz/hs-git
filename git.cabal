@@ -3,7 +3,7 @@ Version:             0.1
 Synopsis:            Git operations in haskell
 Description:
     .
-    An haskell implementation of git storage operations, allowing users
+    A Haskell implementation of git storage operations, allowing users
     to manipulate git repositories (read and write).
     .
     This implementation is fully interoperable with the main C implementation.
