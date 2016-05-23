@@ -3,7 +3,7 @@ Version:             0.1
 Synopsis:            Git operations in haskell
 Description:
     .
-    An haskell implementation of git storage operations, allowing users
+    A Haskell implementation of git storage operations, allowing users
     to manipulate git repositories (read and write).
     .
     This implementation is fully interoperable with the main C implementation.
@@ -19,7 +19,7 @@ Maintainer:          Vincent Hanquez <vincent@snarc.org>
 Category:            Development
 Stability:           experimental
 Build-Type:          Simple
-Homepage:            https://github.com/vincenthz/hit
+Homepage:            https://github.com/vincenthz/hs-git
 tested-with:         GHC == 7.6.3, GHC == 7.8.4, GHC == 7.10.3, GHC == 8.0.1
 Cabal-Version:       >=1.8
 data-files:          README.md
