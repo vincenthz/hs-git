@@ -30,29 +30,39 @@ import Data.Git.Repository
 
 import qualified Data.Map as M
 
+import Data.Typeable
 import Control.Monad
 import Control.Concurrent.MVar
 
-type Dir = M.Map EntName (ModePerm, TreeSt)
-type TreeVar = MVar Dir
-data TreeSt = TreeRef Ref | TreeLoaded TreeVar
-type WorkTree = MVar TreeSt
+type Dir hash = M.Map EntName (ModePerm, TreeSt hash)
+
+type TreeVar hash = MVar (Dir hash)
+
+data TreeSt hash =
+      TreeRef (Ref hash)
+    | TreeLoaded (TreeVar hash)
+
+type WorkTree hash = MVar (TreeSt hash)
 
 data EntType = EntDirectory | EntFile | EntExecutable
     deriving (Show,Eq)
 
 -- | Create a new worktree
-workTreeNew :: IO WorkTree
+workTreeNew :: IO (WorkTree hash)
 workTreeNew = newMVar M.empty >>= newMVar . TreeLoaded
 
 -- | Create a worktree from a tree reference.
-workTreeFrom :: Ref -> IO WorkTree
+workTreeFrom :: Ref hash -> IO (WorkTree hash)
 workTreeFrom ref = newMVar (TreeRef ref)
 
 -- | delete a path from a working tree
 --
 -- if the path doesn't exist, no error is raised
-workTreeDelete :: Git -> WorkTree -> EntPath -> IO ()
+workTreeDelete :: (Typeable hash, HashAlgorithm hash)
+               => Git hash
+               -> WorkTree hash
+               -> EntPath
+               -> IO ()
 workTreeDelete git wt path = diveFromRoot git wt path dive
   where dive _          []     = error "internal error: delete: empty dive"
         dive varCurrent [file] = modifyMVar_ varCurrent (return . M.delete file)
@@ -66,9 +76,14 @@ workTreeDelete git wt path = diveFromRoot git wt path dive
 --
 -- The ref should point to a valid blob or tree object, and
 -- it's safer to write the referenced tree or blob object first.
-workTreeSet :: Git -> WorkTree -> EntPath -> (EntType, Ref) -> IO ()
+workTreeSet :: (Typeable hash, HashAlgorithm hash)
+            => Git hash
+            -> WorkTree hash
+            -> EntPath
+            -> (EntType, Ref hash)
+            -> IO ()
 workTreeSet git wt path (entType, entRef) = diveFromRoot git wt path dive
-  where dive :: TreeVar -> EntPath -> IO ()
+  where --dive :: TreeVar hash -> EntPath -> IO ()
         dive _          []     = error "internal error: set: empty dive"
         dive varCurrent [file] = modifyMVar_ varCurrent (return . M.insert file (entTypeToPerm entType, TreeRef entRef))
         dive varCurrent (x:xs) = do
@@ -88,7 +103,7 @@ workTreeFlushAt git wt path = do
 
 -- | Flush the worktree by creating all the necessary trees in the git store
 -- and return the root ref of the work tree.
-workTreeFlush :: Git -> WorkTree -> IO Ref
+workTreeFlush :: HashAlgorithm hash => Git hash -> WorkTree hash -> IO (Ref hash)
 workTreeFlush git wt = do
     -- write all the trees that need to be written
     -- switch to modifyMVar
@@ -111,7 +126,7 @@ workTreeFlush git wt = do
 
 ----- helpers -----
 
-loadTreeVar :: Git -> Ref -> IO TreeVar
+loadTreeVar :: (Typeable hash, HashAlgorithm hash) => Git hash -> Ref hash -> IO (TreeVar hash)
 loadTreeVar git treeRef = do
     (Tree ents) <- getTree git treeRef
     let t = foldr (\(m,b,r) acc -> M.insert b (m,TreeRef r) acc) M.empty ents
@@ -119,10 +134,15 @@ loadTreeVar git treeRef = do
 
 entTypeToPerm :: EntType -> ModePerm
 entTypeToPerm EntDirectory  = ModePerm 0o040000
-entTypeToPerm EntExecutable = ModePerm 0o100755 
+entTypeToPerm EntExecutable = ModePerm 0o100755
 entTypeToPerm EntFile       = ModePerm 0o100644
 
-loadOrGetTree :: Git -> EntName -> TreeVar -> (Dir -> IO (Dir, Either TreeVar a)) -> IO (Either TreeVar a)
+loadOrGetTree :: (Typeable hash, HashAlgorithm hash)
+              => Git hash
+              -> EntName
+              -> TreeVar hash
+              -> (Dir hash -> IO (Dir hash, Either (TreeVar hash) a))
+              -> IO (Either (TreeVar hash) a)
 loadOrGetTree git x varCurrent onMissing =
     modifyMVar varCurrent $ \m -> do
         case M.lookup x m of
@@ -135,9 +155,12 @@ loadOrGetTree git x varCurrent onMissing =
                         return (M.adjust (\(perm,_) -> (perm, TreeLoaded var)) x m, Left var)
                     TreeLoaded var -> return (m, Left var)
 
-diveFromRoot :: Git -> WorkTree -> EntPath
-             -> (TreeVar -> EntPath -> IO ())
-             -> IO () 
+diveFromRoot :: (Typeable hash, HashAlgorithm hash)
+             => Git hash
+             -> WorkTree hash
+             -> EntPath
+             -> (TreeVar hash -> EntPath -> IO ())
+             -> IO ()
 diveFromRoot git wt path dive
     | path == [] = return ()
     | otherwise    = do
@@ -148,4 +171,3 @@ diveFromRoot git wt path dive
                     TreeRef ref      -> loadTreeVar git ref
         putMVar wt $ TreeLoaded current
         dive current path
-

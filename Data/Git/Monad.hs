@@ -85,6 +85,8 @@ import qualified Data.Git.Storage.Object as Git
 import           Data.Git.Imports
 import           Data.Git.OS
 
+import           Data.Git.Ref (SHA1)
+
 --import qualified Filesystem.Path as FP
 
 import Data.Set (Set)
@@ -107,8 +109,8 @@ revisionFromString = Git.fromString
 -- > resolve "HEAD^^^"
 --
 class Resolvable rev where
-    resolve :: GitMonad m => rev -> m (Maybe Git.Ref)
-instance Resolvable Git.Ref where
+    resolve :: GitMonad m => rev -> m (Maybe (Git.Ref SHA1))
+instance Resolvable (Git.Ref SHA1) where
     resolve = return . Just
 instance Resolvable Git.Revision where
     resolve rev = do
@@ -127,13 +129,13 @@ instance Resolvable Git.RefName where
 -- package.
 class (Functor m, Applicative m, Monad m) => GitMonad m where
     -- | the current Monad must allow access to the current Git
-    getGit :: m Git.Git
+    getGit :: m (Git.Git SHA1)
     liftGit :: IO a -> m a
 
 branchList :: GitMonad git => git (Set Git.RefName)
 branchList = getGit >>= liftGit . Git.branchList
 
-branchWrite :: GitMonad git => Git.RefName -> Git.Ref -> git ()
+branchWrite :: GitMonad git => Git.RefName -> Git.Ref SHA1 -> git ()
 branchWrite rn ref = do
     git <- getGit
     liftGit $ Git.branchWrite git rn ref
@@ -141,27 +143,27 @@ branchWrite rn ref = do
 tagList :: GitMonad git => git (Set Git.RefName)
 tagList = getGit >>= liftGit . Git.tagList
 
-tagWrite :: GitMonad git => Git.RefName -> Git.Ref -> git ()
+tagWrite :: GitMonad git => Git.RefName -> Git.Ref SHA1 -> git ()
 tagWrite rn ref = do
     git <- getGit
     liftGit $ Git.tagWrite git rn ref
 
-headGet :: GitMonad git => git (Either Git.Ref Git.RefName)
+headGet :: GitMonad git => git (Either (Git.Ref SHA1) Git.RefName)
 headGet = getGit >>= liftGit . Git.headGet
 
-headResolv :: GitMonad git => git (Maybe Git.Ref)
+headResolv :: GitMonad git => git (Maybe (Git.Ref SHA1))
 headResolv = do
     e <- headGet
     case e of
         Left ref -> resolve ref
         Right v  -> resolve v
 
-headSet :: GitMonad git => Either Git.Ref Git.RefName -> git ()
+headSet :: GitMonad git => Either (Git.Ref SHA1) Git.RefName -> git ()
 headSet e = do
     git <- getGit
     liftGit $ Git.headSet git e
 
-getCommit :: (GitMonad git, Resolvable ref) => ref -> git (Maybe Git.Commit)
+getCommit :: (GitMonad git, Resolvable ref) => ref -> git (Maybe (Git.Commit SHA1))
 getCommit r = do
     mRef <- resolve r
     case mRef of
@@ -170,7 +172,7 @@ getCommit r = do
             git <- getGit
             liftGit $ Git.getCommitMaybe git ref
 
-setObject :: (GitMonad git, Git.Objectable obj) => obj -> git Git.Ref
+setObject :: (GitMonad git, Git.Objectable obj) => obj SHA1 -> git (Git.Ref SHA1)
 setObject obj = do
     git <- getGit
     liftGit $ Git.setObject git $ Git.toObject obj
@@ -178,7 +180,7 @@ setObject obj = do
 getObject :: (GitMonad git, Resolvable ref)
           => ref
           -> Bool
-          -> git (Maybe Git.Object)
+          -> git (Maybe (Git.Object SHA1))
 getObject rev resolvDelta = do
     git <- getGit
     mRef <- resolve rev
@@ -186,13 +188,13 @@ getObject rev resolvDelta = do
         Nothing  -> return Nothing
         Just ref -> liftGit $ Git.getObject git ref resolvDelta
 
-workTreeNew :: GitMonad git => git Git.WorkTree
+workTreeNew :: GitMonad git => git (Git.WorkTree hash)
 workTreeNew = liftGit Git.workTreeNew
 
-workTreeFrom :: GitMonad git => Git.Ref -> git Git.WorkTree
+workTreeFrom :: GitMonad git => Git.Ref hash -> git (Git.WorkTree hash)
 workTreeFrom ref = liftGit $ Git.workTreeFrom ref
 
-workTreeFlush :: GitMonad git => Git.WorkTree -> git Git.Ref
+workTreeFlush :: GitMonad git => Git.WorkTree SHA1 -> git (Git.Ref SHA1)
 workTreeFlush tree = do
     git <- getGit
     liftGit $ Git.workTreeFlush git tree
@@ -200,7 +202,7 @@ workTreeFlush tree = do
 resolvPath :: (GitMonad git, Resolvable ref)
            => ref -- ^ the commit Ref, Revision ("master", "HEAD^^" or a ref...)
            -> Git.EntPath
-           -> git (Maybe Git.Ref)
+           -> git (Maybe (Git.Ref SHA1))
 resolvPath commitRev entPath = do
     git <- getGit
     mRef <- resolve commitRev
@@ -221,7 +223,7 @@ data Result ctx a
 -------------------------------------------------------------------------------
 
 data GitContext = GitContext
-    { gitContextGit  :: !Git.Git
+    { gitContextGit  :: !(Git.Git SHA1)
     }
 
 newtype GitM a = GitM
@@ -267,13 +269,13 @@ bindGitM m fm = GitM $ \ctx -> do
 failGitM :: String -> GitM a
 failGitM msg = GitM $ \_ -> return (ResultFailure msg)
 
-getGitM :: GitM Git.Git
+getGitM :: GitM (Git.Git SHA1)
 getGitM = GitM $ \ctx -> return (ResultSuccess ctx (gitContextGit ctx))
 
 liftGitM :: IO a -> GitM a
 liftGitM f = GitM $ \ctx -> ResultSuccess ctx <$> f
 
-executeGitM :: Git.Git -> GitM a -> IO (Either String a)
+executeGitM :: Git.Git SHA1 -> GitM a -> IO (Either String a)
 executeGitM git m = do
     r <- runGitM m $ GitContext git
     return $ case r of
@@ -292,8 +294,8 @@ withCurrentRepo m = Git.withCurrentRepo (\git -> executeGitM git m)
 -------------------------------------------------------------------------------
 
 data CommitAccessContext = CommitAccessContext
-    { commitAccessContextCommit :: !Git.Commit
-    , commitAccessContextRef    :: !Git.Ref
+    { commitAccessContextCommit :: !(Git.Commit SHA1)
+    , commitAccessContextRef    :: !(Git.Ref SHA1)
     }
 
 -- | ReadOnly operations on a given commit
@@ -340,7 +342,7 @@ bindCommitAccessM m fm = CommitAccessM $ \ctx -> do
 failCommitAccessM :: String -> CommitAccessM a
 failCommitAccessM msg = CommitAccessM $ \_ -> return (ResultFailure msg)
 
-getCommitAccessM :: CommitAccessM Git.Git
+getCommitAccessM :: CommitAccessM (Git.Git SHA1)
 getCommitAccessM = CommitAccessM $ \ctx -> ResultSuccess ctx <$> getGit
 
 liftCommitAccessM :: IO a -> CommitAccessM a
@@ -358,7 +360,7 @@ getAuthor = withCommitAccessContext (Git.commitAuthor . commitAccessContextCommi
 getCommitter :: CommitAccessM Git.Person
 getCommitter = withCommitAccessContext (Git.commitCommitter . commitAccessContextCommit)
 
-getParents :: CommitAccessM [Git.Ref]
+getParents :: CommitAccessM [Git.Ref SHA1]
 getParents = withCommitAccessContext (Git.commitParents . commitAccessContextCommit)
 
 getExtras :: CommitAccessM [Git.CommitExtra]
@@ -370,10 +372,10 @@ getEncoding = withCommitAccessContext (Git.commitEncoding . commitAccessContextC
 getMessage :: CommitAccessM ByteString
 getMessage = withCommitAccessContext (Git.commitMessage . commitAccessContextCommit)
 
-getContextRef_ :: CommitAccessM Git.Ref
+getContextRef_ :: CommitAccessM (Git.Ref SHA1)
 getContextRef_ = withCommitAccessContext commitAccessContextRef
 
-getContextObject_ :: Git.EntPath -> CommitAccessM (Maybe Git.Object)
+getContextObject_ :: Git.EntPath -> CommitAccessM (Maybe (Git.Object SHA1))
 getContextObject_ fp = do
     commitRef <- getContextRef_
     mRef <- resolvPath commitRef fp
@@ -451,11 +453,11 @@ withCommit rev m = do
 data CommitContext = CommitContext
     { commitContextAuthor    :: !Git.Person
     , commitContextCommitter :: !Git.Person
-    , commitContextParents   :: ![Git.Ref]
+    , commitContextParents   :: ![Git.Ref SHA1]
     , commitContextExtras    :: ![Git.CommitExtra]
     , commitContextEncoding  :: !(Maybe ByteString)
     , commitContextMessage   :: !ByteString
-    , commitContextTree      :: !Git.WorkTree
+    , commitContextTree      :: !(Git.WorkTree SHA1)
     }
 
 newtype CommitM  a = CommitM
@@ -501,7 +503,7 @@ bindCommitM m fm = CommitM $ \ctx -> do
 failCommitM :: String -> CommitM a
 failCommitM msg = CommitM $ \_ -> return (ResultFailure msg)
 
-getCommitM :: CommitM Git.Git
+getCommitM :: CommitM (Git.Git SHA1)
 getCommitM = CommitM $ \ctx -> ResultSuccess ctx <$> getGit
 
 liftCommitM :: IO a -> CommitM a
@@ -523,7 +525,7 @@ setCommitter :: Git.Person -> CommitM ()
 setCommitter p = commitUpdateContext $ \ctx -> return (ctx { commitContextCommitter = p }, ())
 
 -- | replace the Commit's Parents
-setParents :: [Git.Ref] -> CommitM ()
+setParents :: [Git.Ref SHA1] -> CommitM ()
 setParents l = commitUpdateContext $ \ctx -> return (ctx { commitContextParents = l }, ())
 
 -- | replace the Commit's Extras
@@ -540,7 +542,7 @@ setMessage msg = commitUpdateContext $ \ctx -> return (ctx { commitContextMessag
 
 setContextObject_ :: Git.Objectable object
                   => Git.EntPath
-                  -> (Git.EntType, object)
+                  -> (Git.EntType, object SHA1)
                   -> CommitM ()
 setContextObject_ path (t, obj) = do
     ref <- setObject obj
@@ -608,7 +610,7 @@ withNewCommit :: (GitMonad git, Resolvable rev)
               -> CommitM a
                 -- ^ the action to perform in the new commit (set files,
                 -- Person, encoding or extras)
-              -> git (Git.Ref, a)
+              -> git (Git.Ref SHA1, a)
 withNewCommit p mPrec m = do
     workTree <- case mPrec of
                     Nothing -> workTreeNew
@@ -687,7 +689,7 @@ withBranch :: GitMonad git
                 -- the argument is the result of the action on the parent commit.
                 --
                 -- Nothing if the parent does not exist.
-           -> git (Git.Ref, b)
+           -> git (Git.Ref SHA1, b)
 withBranch p branchName keepTree actionParent actionNew = do
     -- attempt to resolve the branch
     mRefParent <- resolve branchName

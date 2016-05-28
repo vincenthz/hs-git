@@ -49,10 +49,11 @@ data RefSpecTy = RefHead
                deriving (Show,Eq,Ord)
 
 -- | content of a ref file.
-data RefContentTy = RefDirect Ref
-                  | RefLink   RefSpecTy
-                  | RefContentUnknown B.ByteString
-                  deriving (Show,Eq)
+data RefContentTy hash =
+      RefDirect (Ref hash)
+    | RefLink   RefSpecTy
+    | RefContentUnknown B.ByteString
+    deriving (Show,Eq)
 
 newtype RefName = RefName { refNameRaw :: String }
     deriving (Show,Eq,Ord)
@@ -108,8 +109,9 @@ data PackedRefs a = PackedRefs
     , packedTags    :: a
     }
 
-readPackedRefs :: LocalPath
-               -> ([(RefName, Ref)] -> a)
+readPackedRefs :: HashAlgorithm hash
+               => LocalPath
+               -> ([(RefName, Ref hash)] -> a)
                -> IO (PackedRefs a)
 readPackedRefs gitRepo constr = do
     exists <- isFile (packedRefsPath gitRepo)
@@ -160,7 +162,7 @@ looseRemotesList gitRepo = listRefs (remotesPath gitRepo)
 existsRefFile :: LocalPath -> RefSpecTy -> IO Bool
 existsRefFile gitRepo specty = isFile $ toPath gitRepo specty
 
-writeRefFile :: LocalPath -> RefSpecTy -> RefContentTy -> IO ()
+writeRefFile :: LocalPath -> RefSpecTy -> RefContentTy hash -> IO ()
 writeRefFile gitRepo specty refcont = do
     createParentDirectory filepath
     writeBinaryFile filepath $ fromRefContent refcont
@@ -169,7 +171,7 @@ writeRefFile gitRepo specty refcont = do
           fromRefContent (RefDirect ref)       = B.concat [toHex ref, B.singleton 0xa]
           fromRefContent (RefContentUnknown c) = c
 
-readRefFile :: LocalPath -> RefSpecTy -> IO RefContentTy
+readRefFile :: HashAlgorithm hash => LocalPath -> RefSpecTy -> IO (RefContentTy hash)
 readRefFile gitRepo specty = toRefContent <$> readBinaryFile filepath
     where filepath = toPath gitRepo specty
           toRefContent content

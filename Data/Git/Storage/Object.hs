@@ -72,43 +72,44 @@ toLazyByteString = id
 #endif
 
 -- | location of an object in the database
-data ObjectLocation = NotFound | Loose Ref | Packed Ref Word64
+data ObjectLocation hash = NotFound | Loose (Ref hash) | Packed (Ref hash) Word64
         deriving (Show,Eq)
 
 -- | Delta objects points to some others objects in the database
 -- either as offset in the pack or as a direct reference.
-data ObjectPtr = PtrRef Ref | PtrOfs Word64 deriving (Show,Eq)
+data ObjectPtr hash = PtrRef (Ref hash) | PtrOfs Word64 deriving (Show,Eq)
 
-type ObjectHeader = (ObjectType, Word64, Maybe ObjectPtr)
+type ObjectHeader hash = (ObjectType, Word64, Maybe (ObjectPtr hash))
 
 type ObjectData = L.ByteString
 
 -- | Raw objects infos have an header (type, size, ptr),
 -- the data and a pointers chains to parents for resolved objects.
-data ObjectInfo = ObjectInfo
-        { oiHeader :: ObjectHeader
+data ObjectInfo hash = ObjectInfo
+        { oiHeader :: ObjectHeader hash
         , oiData   :: ObjectData
-        , oiChains :: [ObjectPtr]
+        , oiChains :: [ObjectPtr hash]
         } deriving (Show,Eq)
 
 -- | describe a git object, that could of 6 differents types:
 -- tree, blob, commit, tag and deltas (offset or ref).
 -- the deltas one are only available in packs.
-data Object = ObjCommit   Commit
-            | ObjTag      Tag
-            | ObjBlob     Blob
-            | ObjTree     Tree
-            | ObjDeltaOfs DeltaOfs
-            | ObjDeltaRef DeltaRef
-            deriving (Show,Eq)
+data Object hash =
+      ObjCommit   (Commit hash)
+    | ObjTag      (Tag hash)
+    | ObjBlob     (Blob hash)
+    | ObjTree     (Tree hash)
+    | ObjDeltaOfs (DeltaOfs hash)
+    | ObjDeltaRef (DeltaRef hash)
+    deriving (Show,Eq)
 
 class Objectable a where
-        getType  :: a -> ObjectType
-        getRaw   :: a -> L.ByteString
-        isDelta  :: a -> Bool
-        toObject :: a -> Object
+        getType  :: a hash -> ObjectType
+        getRaw   :: a hash -> L.ByteString
+        isDelta  :: a hash -> Bool
+        toObject :: a hash -> Object hash
 
-objectToType :: Object -> ObjectType
+objectToType :: Object hash -> ObjectType
 objectToType (ObjTree _)     = TypeTree
 objectToType (ObjBlob _)     = TypeBlob
 objectToType (ObjCommit _)   = TypeCommit
@@ -135,24 +136,24 @@ objectTypeIsDelta TypeDeltaOff = True
 objectTypeIsDelta TypeDeltaRef = True
 objectTypeIsDelta _            = False
 
-objectIsDelta :: Object -> Bool
+objectIsDelta :: Object hash -> Bool
 objectIsDelta (ObjDeltaOfs _) = True
 objectIsDelta (ObjDeltaRef _) = True
 objectIsDelta _               = False
 
-objectToTree :: Object -> Maybe Tree
+objectToTree :: Object hash -> Maybe (Tree hash)
 objectToTree (ObjTree tree) = Just tree
 objectToTree _              = Nothing
 
-objectToCommit :: Object -> Maybe Commit
+objectToCommit :: Object hash -> Maybe (Commit hash)
 objectToCommit (ObjCommit commit) = Just commit
 objectToCommit _                  = Nothing
 
-objectToTag :: Object -> Maybe Tag
+objectToTag :: Object hash -> Maybe (Tag hash)
 objectToTag (ObjTag tag) = Just tag
 objectToTag _            = Nothing
 
-objectToBlob :: Object -> Maybe Blob
+objectToBlob :: Object hash -> Maybe (Blob hash)
 objectToBlob (ObjBlob blob) = Just blob
 objectToBlob _              = Nothing
 
@@ -165,18 +166,18 @@ modeperm :: P.Parser ModePerm
 modeperm = ModePerm . fromIntegral <$> octal
 
 -- | parse a tree content
-treeParse :: P.Parser Tree
+treeParse :: HashAlgorithm hash => P.Parser (Tree hash)
 treeParse = Tree <$> parseEnts
     where parseEnts = P.hasMore >>= \b -> if b then liftM2 (:) parseEnt parseEnts else return []
           parseEnt = liftM3 (,,) modeperm parseEntName (P.byte 0 >> P.referenceBin)
           parseEntName = entName <$> (P.skipASCII ' ' >> P.takeWhile (/= 0))
 
 -- | parse a blob content
-blobParse :: P.Parser Blob
+blobParse :: P.Parser (Blob hash)
 blobParse = (Blob . L.fromChunks . (:[]) <$> P.takeAll)
 
 -- | parse a commit content
-commitParse :: P.Parser Commit
+commitParse :: HashAlgorithm hash => P.Parser (Commit hash)
 commitParse = do
         tree <- P.string "tree " >> P.referenceHex
         P.skipEOL
@@ -205,7 +206,7 @@ commitParse = do
                 concatLines = B.concat . intersperse (B.pack [0xa])
 
 -- | parse a tag content
-tagParse :: P.Parser Tag
+tagParse :: HashAlgorithm hash => P.Parser (Tag hash)
 tagParse = do
         object <- P.string "object " >> P.referenceHex
         P.skipEOL
@@ -242,7 +243,7 @@ asciiChar c
     | otherwise = error ("char " <> show c <> " not valid ASCII")
   where cp = fromEnum c
 
-objectParseTree, objectParseCommit, objectParseTag, objectParseBlob :: P.Parser Object
+objectParseTree, objectParseCommit, objectParseTag, objectParseBlob :: HashAlgorithm hash => P.Parser (Object hash)
 objectParseTree   = ObjTree <$> treeParse
 objectParseCommit = ObjCommit <$> commitParse
 objectParseTag    = ObjTag <$> tagParse
@@ -252,14 +253,14 @@ objectParseBlob   = ObjBlob <$> blobParse
 objectWriteHeader :: ObjectType -> Word64 -> ByteString
 objectWriteHeader ty sz = BC.pack (objectTypeMarshall ty ++ " " ++ show sz ++ [ '\0' ])
 
-objectWrite :: Object -> L.ByteString
+objectWrite :: Object hash -> L.ByteString
 objectWrite (ObjCommit commit) = commitWrite commit
 objectWrite (ObjTag tag)       = tagWrite tag
 objectWrite (ObjBlob blob)     = blobWrite blob
 objectWrite (ObjTree tree)     = treeWrite tree
 objectWrite _                  = error "delta cannot be marshalled"
 
-treeWrite :: Tree -> L.ByteString
+treeWrite :: Tree hash -> L.ByteString
 treeWrite (Tree ents) = toLazyByteString $ mconcat $ concatMap writeTreeEnt ents
     where writeTreeEnt (ModePerm perm,name,ref) =
                 [ string7 (printf "%o" perm)
@@ -269,7 +270,7 @@ treeWrite (Tree ents) = toLazyByteString $ mconcat $ concatMap writeTreeEnt ents
                 , byteString $ toBinary ref
                 ]
 
-commitWrite :: Commit -> L.ByteString
+commitWrite :: Commit hash -> L.ByteString
 commitWrite (Commit tree parents author committer encoding extra msg) =
     toLazyByteString $ mconcat els
     where
@@ -292,7 +293,7 @@ commitWrite (Commit tree parents author committer encoding extra msg) =
                 ,byteString msg
                 ]
 
-tagWrite :: Tag -> L.ByteString
+tagWrite :: Tag hash -> L.ByteString
 tagWrite (Tag ref ty tag tagger signature) =
     toLazyByteString $ mconcat els
     where els = [ string7 "object ", byteString (toHex ref), eol
@@ -306,7 +307,7 @@ tagWrite (Tag ref ty tag tagger signature) =
 eol :: Builder
 eol = string7 "\n"
 
-blobWrite :: Blob -> L.ByteString
+blobWrite :: Blob hash -> L.ByteString
 blobWrite (Blob bData) = bData
 
 instance Objectable Blob where
@@ -345,7 +346,7 @@ instance Objectable DeltaRef where
         toObject  = ObjDeltaRef
         isDelta   = const True
 
-objectHash :: ObjectType -> Word64 -> L.ByteString -> Ref
+objectHash :: HashAlgorithm hash => ObjectType -> Word64 -> L.ByteString -> Ref hash
 objectHash ty w lbs = hashLBS $ L.fromChunks (objectWriteHeader ty w : L.toChunks lbs)
 
 -- used for objectWrite for commit and tag

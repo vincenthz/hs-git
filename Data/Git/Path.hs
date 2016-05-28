@@ -34,7 +34,7 @@ remoteEntPath gitRepo name ent = remotePath gitRepo name </> fromString ent
 packDirPath :: LocalPath -> LocalPath
 packDirPath repoPath = repoPath </> "objects" </> "pack"
 
-indexPath, packPath :: LocalPath -> Ref -> LocalPath
+indexPath, packPath :: LocalPath -> Ref hash -> LocalPath
 indexPath repoPath indexRef =
         packDirPath repoPath </> fromString ("pack-" ++ toHexString indexRef ++ ".idx")
 
@@ -44,7 +44,7 @@ packPath repoPath packRef =
 objectPath :: LocalPath -> String -> String -> LocalPath
 objectPath repoPath d f = repoPath </> "objects" </> fromString d </> fromString f
 
-objectPathOfRef :: LocalPath -> Ref -> LocalPath
+objectPathOfRef :: HashAlgorithm hash => LocalPath -> Ref hash -> LocalPath
 objectPathOfRef repoPath ref = objectPath repoPath d f
         where (d,f) = toFilePathParts ref
 

@@ -64,15 +64,15 @@ import qualified Data.Map as M
 import qualified Data.Set as Set
 
 -- | hierarchy tree, either a reference to a blob (file) or a tree (directory).
-data HTreeEnt = TreeDir Ref HTree | TreeFile Ref
-type HTree = [(ModePerm,EntName,HTreeEnt)]
+data HTreeEnt hash = TreeDir (Ref hash) (HTree hash) | TreeFile (Ref hash)
+type HTree hash = [(ModePerm,EntName,HTreeEnt hash)]
 
 -- | Exception when trying to convert an object pointed by 'Ref' to
 -- a type that is different
-data InvalidType = InvalidType Ref ObjectType
-                 deriving (Show,Eq,Typeable)
+data InvalidType hash = InvalidType (Ref hash) ObjectType
+    deriving (Show,Eq,Typeable)
 
-instance Exception InvalidType
+instance Typeable hash => Exception (InvalidType hash)
 
 -- should be a standard function that do that...
 mapJustM :: Monad m => (t -> m (Maybe a)) -> Maybe t -> m (Maybe a)
@@ -80,26 +80,26 @@ mapJustM f (Just o) = f o
 mapJustM _ Nothing  = return Nothing
 
 -- | get a specified commit
-getCommitMaybe :: Git -> Ref -> IO (Maybe Commit)
+getCommitMaybe :: HashAlgorithm hash => Git hash -> Ref hash -> IO (Maybe (Commit hash))
 getCommitMaybe git ref = maybe Nothing objectToCommit <$> getObject git ref True
 
 -- | get a specified commit but raises an exception if doesn't exists or type is not appropriate
-getCommit :: Git -> Ref -> IO Commit
+getCommit :: (Typeable hash, HashAlgorithm hash) => Git hash -> Ref hash -> IO (Commit hash)
 getCommit git ref = maybe err id . objectToCommit <$> getObject_ git ref True
   where err = throw $ InvalidType ref TypeCommit
 
 -- | get a specified tree
-getTreeMaybe :: Git -> Ref -> IO (Maybe Tree)
+getTreeMaybe :: HashAlgorithm hash => Git hash -> Ref hash -> IO (Maybe (Tree hash))
 getTreeMaybe git ref = maybe Nothing objectToTree <$> getObject git ref True
 
 -- | get a specified tree but raise
-getTree :: Git -> Ref -> IO Tree
+getTree :: (Typeable hash, HashAlgorithm hash) => Git hash -> Ref hash -> IO (Tree hash)
 getTree git ref = maybe err id . objectToTree <$> getObject_ git ref True
   where err = throw $ InvalidType ref TypeTree
 
 -- | try to resolve a string to a specific commit ref
 -- for example: HEAD, HEAD^, master~3, shortRef
-resolveRevision :: Git -> Revision -> IO (Maybe Ref)
+resolveRevision :: (Typeable hash, HashAlgorithm hash) => Git hash -> Revision -> IO (Maybe (Ref hash))
 resolveRevision git (Revision prefix modifiers) =
     getCacheVal (packedNamed git) >>= \c -> resolvePrefix c >>= maybe (return Nothing) (modf modifiers)
   where
@@ -131,7 +131,7 @@ resolveRevision git (Revision prefix modifiers) =
                              "FETCH_HEAD" -> [ RefFetchHead ]
                              _            -> map (flip ($) (RefName prefix)) [RefTag,RefBranch,RefRemote]
 
-        tryResolvers :: [IO (Maybe Ref)] -> IO (Maybe Ref)
+        tryResolvers :: HashAlgorithm hash => [IO (Maybe (Ref hash))] -> IO (Maybe (Ref hash))
         tryResolvers []            = return $ if (isHexString prefix)
             then Just $ fromHexString prefix
             else Nothing
@@ -139,7 +139,7 @@ resolveRevision git (Revision prefix modifiers) =
            where isResolved (Just r) = return (Just r)
                  isResolved Nothing  = tryResolvers xs
 
-        resolvePrePrefix :: IO (Maybe Ref)
+        --resolvePrePrefix :: HashAlgorithm hash => IO (Maybe (Ref hash))
         resolvePrePrefix
             | not (isHexString prefix) = return Nothing
             | otherwise = do
@@ -167,7 +167,7 @@ resolveRevision git (Revision prefix modifiers) =
         getParentRefs ref = commitParents <$> getCommit git ref
 
 -- | returns a tree from a ref that might be either a commit, a tree or a tag.
-resolveTreeish :: Git -> Ref -> IO (Maybe Tree)
+resolveTreeish :: HashAlgorithm hash => Git hash -> Ref hash -> IO (Maybe (Tree hash))
 resolveTreeish git ref = getObject git ref True >>= mapJustM recToTree
   where recToTree (objectToCommit -> Just (Commit { commitTreeish = tree })) = resolveTreeish git tree
         recToTree (objectToTag    -> Just (Tag tref _ _ _ _))    = resolveTreeish git tref
@@ -188,16 +188,17 @@ resolveTreeish git ref = getObject git ref True >>= mapJustM recToTree
 --
 --          a <-- f(b) <-- f(c) <-- f(d)
 --
-rewrite :: Git                   -- ^ Repository
-        -> (Commit -> IO Commit) -- ^ Mapping function
-        -> Revision              -- ^ revision to start from
-        -> Int                   -- ^ the number of parents to map
-        -> IO Ref                -- ^ return the new head REF
+rewrite :: (Typeable hash, HashAlgorithm hash)
+        => Git hash                          -- ^ Repository
+        -> (Commit hash -> IO (Commit hash)) -- ^ Mapping function
+        -> Revision                          -- ^ revision to start from
+        -> Int                               -- ^ the number of parents to map
+        -> IO (Ref hash)                     -- ^ return the new head REF
 rewrite git mapCommit revision nbParent = do
     ref <- fromMaybe (error "revision cannot be found") <$> resolveRevision git revision
     resolveParents nbParent ref >>= process . reverse
 
-  where resolveParents :: Int -> Ref -> IO [ (Ref, Commit) ]
+  where --resolveParents :: Int -> Ref hash -> IO [ (Ref hash, Commit hash) ]
         resolveParents 0 ref = (:[]) . (,) ref <$> getCommit git ref
         resolveParents n ref = do commit <- getCommit git ref
                                   case commitParents commit of
@@ -215,7 +216,7 @@ rewrite git mapCommit revision nbParent = do
                     rewriteOne ref next
 
 -- | build a hierarchy tree from a tree object
-buildHTree :: Git -> Tree -> IO HTree
+buildHTree :: (Typeable hash, HashAlgorithm hash) => Git hash -> Tree hash -> IO (HTree hash)
 buildHTree git (Tree ents) = mapM resolveTree ents
   where resolveTree (perm, ent, ref) = do
             obj <- getObjectType git ref
@@ -228,13 +229,14 @@ buildHTree git (Tree ents) = mapM resolveTree ents
                 Nothing       -> error "unknown reference in tree object"
 
 -- | resolve the ref (tree or blob) related to a path at a specific commit ref
-resolvePath :: Git     -- ^ repository
-            -> Ref     -- ^ commit reference
-            -> EntPath -- ^ paths
-            -> IO (Maybe Ref)
+resolvePath :: (Typeable hash, HashAlgorithm hash)
+            => Git hash  -- ^ repository
+            -> Ref hash  -- ^ commit reference
+            -> EntPath   -- ^ paths
+            -> IO (Maybe (Ref hash))
 resolvePath git commitRef paths =
     getCommit git commitRef >>= \commit -> resolve (commitTreeish commit) paths
-  where resolve :: Ref -> EntPath -> IO (Maybe Ref)
+  where --resolve :: Ref -> EntPath -> IO (Maybe Ref)
         resolve treeRef []     = return $ Just treeRef
         resolve treeRef (x:xs) = do
             (Tree ents) <- getTree git treeRef
@@ -247,38 +249,38 @@ resolvePath git commitRef paths =
         treeEntRef (_,_,r) = r
 
 -- | Write a branch to point to a specific reference
-branchWrite :: Git     -- ^ repository
-            -> RefName -- ^ the name of the branch to write
-            -> Ref     -- ^ the reference to set
+branchWrite :: Git hash -- ^ repository
+            -> RefName  -- ^ the name of the branch to write
+            -> Ref hash -- ^ the reference to set
             -> IO ()
 branchWrite git branchName ref =
     writeRefFile (gitRepoPath git) (RefBranch branchName) (RefDirect ref)
 
 -- | Return the list of branches
-branchList :: Git -> IO (Set RefName)
+branchList :: Git hash -> IO (Set RefName)
 branchList git = do
     ps <- Set.fromList . M.keys . packedBranchs <$> getCacheVal (packedNamed git)
     ls <- Set.fromList <$> looseHeadsList (gitRepoPath git)
     return $ Set.union ps ls
 
 -- | Write a tag to point to a specific reference
-tagWrite :: Git     -- ^ repository
-         -> RefName -- ^ the name of the tag to write
-         -> Ref     -- ^ the reference to set
+tagWrite :: Git hash -- ^ repository
+         -> RefName  -- ^ the name of the tag to write
+         -> Ref hash -- ^ the reference to set
          -> IO ()
 tagWrite git tagname ref =
     writeRefFile (gitRepoPath git) (RefTag tagname) (RefDirect ref)
 
 -- | Return the list of branches
-tagList :: Git -> IO (Set RefName)
+tagList :: Git hash -> IO (Set RefName)
 tagList git = do
     ps <- Set.fromList . M.keys . packedTags <$> getCacheVal (packedNamed git)
     ls <- Set.fromList <$> looseTagsList (gitRepoPath git)
     return $ Set.union ps ls
 
 -- | Set head to point to either a reference or a branch name.
-headSet :: Git                -- ^ repository
-        -> Either Ref RefName -- ^ either a raw reference or a branch name
+headSet :: Git hash                  -- ^ repository
+        -> Either (Ref hash) RefName -- ^ either a raw reference or a branch name
         -> IO ()
 headSet git (Left ref)      =
     writeRefFile (gitRepoPath git) RefHead (RefDirect ref)
@@ -286,8 +288,9 @@ headSet git (Right refname) =
     writeRefFile (gitRepoPath git) RefHead (RefLink $ RefBranch refname)
 
 -- | Get what the head is pointing to, or the reference otherwise
-headGet :: Git
-        -> IO (Either Ref RefName)
+headGet :: HashAlgorithm hash
+        => Git hash
+        -> IO (Either (Ref hash) RefName)
 headGet git = do
     content <- readRefFile (gitRepoPath git) RefHead
     case content of
@@ -297,7 +300,7 @@ headGet git = do
         RefContentUnknown bs  -> error ("unknown content in HEAD: " ++ show bs)
 
 -- | Read the Config
-configGetAll :: Git -> IO [Config]
+configGetAll :: Git hash -> IO [Config]
 configGetAll git = readIORef (configs git)
 
 -- | Get a configuration element from the config file, starting from the
@@ -307,7 +310,7 @@ configGetAll git = readIORef (configs git)
 --
 -- > configGet git "user" "name"
 --
-configGet :: Git               -- ^ Git context
+configGet :: Git hash          -- ^ Git context
           -> String            -- ^ section name
           -> String            -- ^ key name
           -> IO (Maybe String) -- ^ The resulting value if it exists

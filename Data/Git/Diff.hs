@@ -31,9 +31,11 @@ import Data.Char (ord)
 import Data.Git
 import Data.Git.Repository
 import Data.Git.Storage
+import Data.Git.Ref
 import Data.Git.Storage.Object
 import Data.ByteString.Lazy.Char8 as L
 
+import Data.Typeable
 import Data.Algorithm.Patience as AP (Item(..), diff)
 
 -- | represents a blob's content (i.e., the content of a file at a given
@@ -43,10 +45,10 @@ data BlobContent = FileContent [L.ByteString] -- ^ Text file's lines
     deriving (Show)
 
 -- | This is a blob description at a given state (revision)
-data BlobState = BlobState
+data BlobState hash = BlobState
     { bsFilename :: EntPath
     , bsMode     :: ModePerm
-    , bsRef      :: Ref
+    , bsRef      :: Ref hash
     , bsContent  :: BlobContent
     }
     deriving (Show)
@@ -54,18 +56,20 @@ data BlobState = BlobState
 -- | Two 'BlobState' are equal if they have the same filename, i.e.,
 --
 -- > ((BlobState x _ _ _) == (BlobState y _ _ _)) = (x == y)
-instance Eq BlobState where
+instance Eq (BlobState hash) where
     (BlobState f1 _ _ _) == (BlobState f2 _ _ _) = f2 == f1
 
 -- | Represents a file state between two revisions
 -- A file (a blob) can be present in the first Tree's revision but not in the
 -- second one, then it has been deleted. If only in the second Tree's revision,
 -- then it has been created. If it is in the both, maybe it has been changed.
-data BlobStateDiff = OnlyOld   BlobState
-                   | OnlyNew   BlobState
-                   | OldAndNew BlobState BlobState
+data BlobStateDiff hash =
+      OnlyOld   (BlobState hash)
+    | OnlyNew   (BlobState hash)
+    | OldAndNew (BlobState hash) (BlobState hash)
 
-buildListForDiff :: Git -> Ref -> IO [BlobState]
+buildListForDiff :: (Typeable hash, HashAlgorithm hash)
+                 => Git hash -> Ref hash -> IO [BlobState hash]
 buildListForDiff git ref = do
     commit <- getCommit git ref
     tree   <- resolveTreeish git $ commitTreeish commit
@@ -74,7 +78,7 @@ buildListForDiff git ref = do
                      buildTreeList htree []
         _      -> error "cannot build a tree from this reference"
     where
-        buildTreeList :: HTree -> EntPath -> IO [BlobState]
+        --buildTreeList :: HTree hash -> EntPath -> IO [BlobState hash]
         buildTreeList [] _ = return []
         buildTreeList ((d,n,TreeFile r):xs) pathPrefix = do
             content <- catBlobFile r
@@ -88,7 +92,7 @@ buildListForDiff git ref = do
             l2 <- buildTreeList subTree (entPathAppend pathPrefix n)
             return $ l1 ++ l2
 
-        catBlobFile :: Ref -> IO L.ByteString
+        --catBlobFile :: Ref hash -> IO L.ByteString
         catBlobFile blobRef = do
             mobj <- getObjectRaw git blobRef True
             case mobj of
@@ -122,18 +126,19 @@ buildListForDiff git ref = do
 -- > getdiffwith f [] head^ head git
 -- >     where f (OnlyNew bs) acc = (bsFilename bs):acc
 -- >           f _            acc = acc
-getDiffWith :: (BlobStateDiff -> a -> a) -- ^ diff helper (State -> accumulator -> accumulator)
-            -> a                         -- ^ accumulator
-            -> Ref                       -- ^ commit reference (the original state)
-            -> Ref                       -- ^ commit reference (the new state)
-            -> Git                       -- ^ repository
+getDiffWith :: (Typeable hash, HashAlgorithm hash)
+            => (BlobStateDiff hash -> a -> a) -- ^ diff helper (State -> accumulator -> accumulator)
+            -> a                              -- ^ accumulator
+            -> Ref hash                       -- ^ commit reference (the original state)
+            -> Ref hash                       -- ^ commit reference (the new state)
+            -> Git hash                       -- ^ repository
             -> IO a
 getDiffWith f acc ref1 ref2 git = do
     commit1 <- buildListForDiff git ref1
     commit2 <- buildListForDiff git ref2
     return $ Prelude.foldr f acc $ doDiffWith commit1 commit2
     where
-        doDiffWith :: [BlobState] -> [BlobState] -> [BlobStateDiff]
+        doDiffWith :: [BlobState hash] -> [BlobState hash] -> [BlobStateDiff hash]
         doDiffWith []        []        = []
         doDiffWith [bs1]     []        = [OnlyOld bs1]
         doDiffWith []        (bs2:xs2) = (OnlyNew bs2):(doDiffWith [] xs2)
@@ -173,10 +178,11 @@ data GitFileMode = NewMode        ModePerm
                  | ModifiedMode   ModePerm ModePerm
                  | UnModifiedMode ModePerm
 
-data GitFileRef = NewRef        Ref
-                | OldRef        Ref
-                | ModifiedRef   Ref Ref
-                | UnModifiedRef Ref
+data GitFileRef hash =
+      NewRef        (Ref hash)
+    | OldRef        (Ref hash)
+    | ModifiedRef   (Ref hash) (Ref hash)
+    | UnModifiedRef (Ref hash)
 
 -- | This is a proposed diff records for a given file.
 -- It contains useful information:
@@ -184,29 +190,30 @@ data GitFileRef = NewRef        Ref
 --   * a file diff (with the Data.Algorithm.Patience method)
 --   * the file's mode (i.e. the file priviledge)
 --   * the file's ref
-data GitDiff = GitDiff
+data GitDiff hash = GitDiff
     { hFileName    :: EntPath
     , hFileContent :: GitFileContent
     , hFileMode    :: GitFileMode
-    , hFileRef     :: GitFileRef
+    , hFileRef     :: GitFileRef hash
     }
 
 -- | A default Diff getter which returns all diff information (Mode, Content
 -- and Binary) with a context of 5 lines.
 --
 -- > getDiff = getDiffWith (defaultDiff 5) []
-getDiff :: Ref
-        -> Ref
-        -> Git
-        -> IO [GitDiff]
+getDiff :: (Typeable hash, HashAlgorithm hash)
+        => Ref hash
+        -> Ref hash
+        -> Git hash
+        -> IO [GitDiff hash]
 getDiff = getDiffWith (defaultDiff 5) []
 
 -- | A default diff helper. It is an example about how you can write your own
 -- diff helper or you can use it if you want to get all of differences.
-defaultDiff :: Int           -- ^ Number of line for context
-            -> BlobStateDiff
-            -> [GitDiff]     -- ^ Accumulator
-            -> [GitDiff]     -- ^ Accumulator with a new content
+defaultDiff :: Int                -- ^ Number of line for context
+            -> BlobStateDiff hash
+            -> [GitDiff hash]     -- ^ Accumulator
+            -> [GitDiff hash]     -- ^ Accumulator with a new content
 defaultDiff _ (OnlyOld   old    ) acc =
     let oldMode    = OldMode (bsMode old)
         oldRef     = OldRef  (bsRef  old)
@@ -229,7 +236,7 @@ defaultDiff context (OldAndNew old new) acc =
     in case (mode, ref) of
            ((UnModifiedMode _), (UnModifiedRef _)) -> acc
            _ -> (GitDiff (bsFilename new) (content ref) mode ref):acc
-    where content :: GitFileRef -> GitFileContent
+    where content :: GitFileRef hash -> GitFileContent
           content (UnModifiedRef _) = UnModifiedFile
           content _                 = createDiff (bsContent old) (bsContent new)
 

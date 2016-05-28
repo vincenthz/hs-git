@@ -44,18 +44,18 @@ import Data.Git.Storage.FileReader
 
 import Data.Word
 
-type PackedObjectRaw = (PackedObjectInfo, L.ByteString)
+type PackedObjectRaw hash = (PackedObjectInfo hash, L.ByteString)
 
-data PackedObjectInfo = PackedObjectInfo
+data PackedObjectInfo hash = PackedObjectInfo
         { poiType       :: ObjectType
         , poiOffset     :: Word64
         , poiSize       :: Word64
         , poiActualSize :: Word64
-        , poiExtra      :: Maybe ObjectPtr
+        , poiExtra      :: Maybe (ObjectPtr hash)
         } deriving (Show,Eq)
 
 -- | Enumerate the pack refs available in this repository.
-packEnumerate :: LocalPath -> IO [Ref]
+packEnumerate :: HashAlgorithm hash => LocalPath -> IO [Ref hash]
 packEnumerate repoPath = map onlyHash . filter isPackFile <$> listDirectoryFilename (repoPath </> "objects" </> "pack")
   where
         isPackFile :: String -> Bool
@@ -64,7 +64,7 @@ packEnumerate repoPath = map onlyHash . filter isPackFile <$> listDirectoryFilen
         takebut n l = take (length l - n) l
 
 -- | open a pack
-packOpen :: LocalPath -> Ref -> IO FileReader
+packOpen :: LocalPath -> Ref hash -> IO FileReader
 packOpen repoPath packRef = openFile (packPath repoPath packRef) ReadMode >>= fileReaderNew False
 
 -- | close a pack
@@ -72,7 +72,7 @@ packClose :: FileReader -> IO ()
 packClose = fileReaderClose
 
 -- | return the number of entries in this pack
-packReadHeader :: LocalPath -> Ref -> IO Word32
+packReadHeader :: LocalPath -> Ref hash -> IO Word32
 packReadHeader repoPath packRef =
         withFileReader (packPath repoPath packRef) $ \filereader ->
                 fileReaderParse filereader parseHeader
@@ -84,19 +84,31 @@ packReadHeader repoPath packRef =
                 P.word32
 
 -- | read an object at a specific position using a map function on the objectData
-packReadMapAtOffset :: FileReader -> Word64 -> (L.ByteString -> L.ByteString) -> IO (Maybe Object)
+packReadMapAtOffset :: HashAlgorithm hash
+                    => FileReader
+                    -> Word64
+                    -> (L.ByteString -> L.ByteString)
+                    -> IO (Maybe (Object hash))
 packReadMapAtOffset fr offset mapData = fileReaderSeek fr offset >> getNextObject fr mapData
 
 -- | read an object at a specific position
-packReadAtOffset :: FileReader -> Word64 -> IO (Maybe Object)
+packReadAtOffset :: HashAlgorithm hash => FileReader -> Word64 -> IO (Maybe (Object hash))
 packReadAtOffset fr offset = packReadMapAtOffset fr offset id
 
 -- | read a raw representation at a specific position
-packReadRawAtOffset :: FileReader -> Word64 -> IO (PackedObjectRaw)
+packReadRawAtOffset :: HashAlgorithm hash
+                    => FileReader
+                    -> Word64
+                    -> IO (PackedObjectRaw hash)
 packReadRawAtOffset fr offset = fileReaderSeek fr offset >> getNextObjectRaw fr
 
 -- | enumerate all objects in this pack and callback to f for reach raw objects
-packEnumerateObjects :: LocalPath -> Ref -> Int -> (PackedObjectRaw -> IO a) -> IO ()
+packEnumerateObjects :: HashAlgorithm hash
+                     => LocalPath
+                     -> Ref hash
+                     -> Int
+                     -> (PackedObjectRaw hash -> IO a)
+                     -> IO ()
 packEnumerateObjects repoPath packRef entries f =
         withFileReader (packPath repoPath packRef) $ \filebuffer -> do
                 fileReaderSeek filebuffer 12
@@ -106,15 +118,22 @@ packEnumerateObjects repoPath packRef entries f =
                 parseNext _  0    = return ()
                 parseNext fr ents = getNextObjectRaw fr >>= f >> parseNext fr (ents-1)
 
-getNextObject :: FileReader -> (L.ByteString -> L.ByteString) -> IO (Maybe Object)
+getNextObject :: HashAlgorithm hash
+              => FileReader
+              -> (L.ByteString -> L.ByteString)
+              -> IO (Maybe (Object hash))
 getNextObject fr mapData =
         packedObjectToObject . second mapData <$> getNextObjectRaw fr
 
-packedObjectToObject :: (PackedObjectInfo, L.ByteString) -> Maybe Object
+packedObjectToObject :: HashAlgorithm hash
+                     => (PackedObjectInfo hash, L.ByteString)
+                     -> Maybe (Object hash)
 packedObjectToObject (PackedObjectInfo { poiType = ty, poiExtra = extra }, objData) =
         packObjectFromRaw (ty, extra, objData)
 
-packObjectFromRaw :: (ObjectType, Maybe ObjectPtr, L.ByteString) -> Maybe Object
+packObjectFromRaw :: HashAlgorithm hash
+                  => (ObjectType, Maybe (ObjectPtr hash), L.ByteString)
+                  -> Maybe (Object hash)
 packObjectFromRaw (TypeCommit, Nothing, objData) = P.maybeParseChunks objectParseCommit (L.toChunks objData)
 packObjectFromRaw (TypeTree, Nothing, objData)   = P.maybeParseChunks objectParseTree (L.toChunks objData)
 packObjectFromRaw (TypeBlob, Nothing, objData)   = P.maybeParseChunks objectParseBlob (L.toChunks objData)
@@ -123,7 +142,7 @@ packObjectFromRaw (TypeDeltaOff, Just (PtrOfs o), objData) = toObject . DeltaOfs
 packObjectFromRaw (TypeDeltaRef, Just (PtrRef r), objData) = toObject . DeltaRef r <$> deltaRead (L.toChunks objData)
 packObjectFromRaw _                              = error "can't happen unless someone change getNextObjectRaw"
 
-getNextObjectRaw :: FileReader -> IO PackedObjectRaw
+getNextObjectRaw :: HashAlgorithm hash => FileReader -> IO (PackedObjectRaw hash)
 getNextObjectRaw fr = do
         sobj       <- fileReaderGetPos fr
         (ty, size) <- fileReaderParse fr parseObjectHeader

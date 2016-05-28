@@ -45,16 +45,16 @@ import qualified Data.Git.Parser as P
 data PackIndexHeader = PackIndexHeader !Word32 !(Vector Word32)
         deriving (Show,Eq)
 
-data PackIndex = PackIndex
-        { packIndexSha1s        :: Vector Ref
+data PackIndex hash = PackIndex
+        { packIndexSha1s        :: Vector (Ref hash)
         , packIndexCRCs         :: Vector Word32
         , packIndexPackoffs     :: Vector Word32
-        , packIndexPackChecksum :: Ref
-        , packIndexChecksum     :: Ref
+        , packIndexPackChecksum :: Ref hash
+        , packIndexChecksum     :: Ref hash
         }
 
 -- | enumerate every indexes file in the pack directory
-packIndexEnumerate :: LocalPath -> IO [Ref]
+packIndexEnumerate :: HashAlgorithm hash => LocalPath -> IO [Ref hash]
 packIndexEnumerate repoPath = map onlyHash . filter isPackFile <$> listDirectoryFilename (repoPath </> "objects" </> "pack")
   where
         isPackFile :: String -> Bool
@@ -63,7 +63,7 @@ packIndexEnumerate repoPath = map onlyHash . filter isPackFile <$> listDirectory
         takebut n l = take (length l - n) l
 
 -- | open an index
-packIndexOpen :: LocalPath -> Ref -> IO FileReader
+packIndexOpen :: LocalPath -> Ref hash -> IO FileReader
 packIndexOpen repoPath indexRef = openFile (indexPath repoPath indexRef) ReadMode >>= fileReaderNew False
 
 -- | close an index
@@ -71,7 +71,7 @@ packIndexClose :: FileReader -> IO ()
 packIndexClose = fileReaderClose
 
 -- | variant of withFile on the index file and with a FileReader
-withPackIndex :: LocalPath -> Ref -> (FileReader -> IO a) -> IO a
+withPackIndex :: LocalPath -> Ref hash -> (FileReader -> IO a) -> IO a
 withPackIndex repoPath indexRef = withFileReader (indexPath repoPath indexRef)
 
 -- | returns the number of references, referenced in this index.
@@ -90,7 +90,13 @@ packIndexHeaderGetNbWithPrefix (PackIndexHeader _ indexes) n
         | otherwise        = (indexes ! n) - (indexes ! (n-1))
 
 -- | fold on refs with a specific prefix
-packIndexHeaderFoldRef :: PackIndexHeader -> FileReader -> Int -> (a -> Word32 -> Ref -> (a, Bool)) -> a -> IO a
+packIndexHeaderFoldRef :: HashAlgorithm hash
+                       => PackIndexHeader
+                       -> FileReader
+                       -> Int
+                       -> (a -> Word32 -> Ref hash -> (a, Bool))
+                       -> a
+                       -> IO a
 packIndexHeaderFoldRef idxHdr@(PackIndexHeader _ indexes) fr refprefix f initAcc
         | nb == 0   = return initAcc
         | otherwise = do
@@ -109,7 +115,7 @@ packIndexHeaderFoldRef idxHdr@(PackIndexHeader _ indexes) fr refprefix f initAcc
                 (sha1Offset,_,_) = packIndexOffsets idxHdr
 
 -- | return the reference offset in the packfile if found
-packIndexGetReferenceLocation :: PackIndexHeader -> FileReader -> Ref -> IO (Maybe Word64)
+packIndexGetReferenceLocation :: HashAlgorithm hash => PackIndexHeader -> FileReader -> Ref hash -> IO (Maybe Word64)
 packIndexGetReferenceLocation idxHdr@(PackIndexHeader _ indexes) fr ref = do
         mrpos <- packIndexHeaderFoldRef idxHdr fr refprefix f Nothing
         case mrpos of
@@ -125,7 +131,7 @@ packIndexGetReferenceLocation idxHdr@(PackIndexHeader _ indexes) fr ref = do
                 (_,_,packOffset) = packIndexOffsets idxHdr
 
 -- | get all references that start by prefix.
-packIndexGetReferencesWithPrefix :: PackIndexHeader -> FileReader -> String -> IO [Ref]
+packIndexGetReferencesWithPrefix :: HashAlgorithm hash => PackIndexHeader -> FileReader -> String -> IO [Ref hash]
 packIndexGetReferencesWithPrefix idxHdr fr prefix =
         packIndexHeaderFoldRef idxHdr fr refprefix f []
         where
@@ -161,11 +167,14 @@ packIndexReadHeader :: FileReader -> IO PackIndexHeader
 packIndexReadHeader fr = fileReaderSeek fr 0 >> fileReaderParse fr parsePackIndexHeader
 
 -- | get index header from an index reference
-packIndexGetHeader :: LocalPath -> Ref -> IO PackIndexHeader
+packIndexGetHeader :: LocalPath -> Ref hash -> IO PackIndexHeader
 packIndexGetHeader repoPath indexRef = withPackIndex repoPath indexRef $ packIndexReadHeader
 
 -- | read all index
-packIndexRead :: LocalPath -> Ref -> IO (PackIndexHeader, (Vector Ref, Vector Word32, Vector Word32, [ByteString], Ref, Ref))
+packIndexRead :: HashAlgorithm hash
+              => LocalPath
+              -> Ref hash
+              -> IO (PackIndexHeader, (Vector (Ref hash), Vector Word32, Vector Word32, [ByteString], Ref hash, Ref hash))
 packIndexRead repoPath indexRef = do
         withPackIndex repoPath indexRef $ \fr -> do
                 idx <- fileReaderParse fr parsePackIndexHeader

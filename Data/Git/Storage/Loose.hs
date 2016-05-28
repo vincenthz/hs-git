@@ -62,7 +62,7 @@ isObjectPrefix [a,b] = isHexDigit a && isHexDigit b
 isObjectPrefix _     = False
 
 -- loose object parsing
-parseHeader :: P.Parser ObjectHeader
+parseHeader :: P.Parser (ObjectHeader hash)
 parseHeader = do
         h <- P.takeWhile1 ((/=) 0x20)
         _ <- P.byte 0x20
@@ -80,7 +80,7 @@ parseBlobHeader   = P.string "blob " >> parseLength >> P.byte 0 >> return Header
 parseLength :: P.Parser Int
 parseLength = P.decimal
 
-parseObject :: L.ByteString -> Object
+parseObject :: HashAlgorithm hash => L.ByteString -> Object hash
 parseObject = parseSuccess getOne
   where
     parseSuccess p = either (error . ("parseObject: " ++)) id . P.eitherParseChunks p . L.toChunks
@@ -94,15 +94,15 @@ parseObject = parseSuccess getOne
 
 
 -- | unmarshall an object (with header) from a bytestring.
-looseUnmarshall :: L.ByteString -> Object
+looseUnmarshall :: HashAlgorithm hash => L.ByteString -> Object hash
 looseUnmarshall = parseObject
 
 -- | unmarshall an object (with header) from a zipped stream.
-looseUnmarshallZipped :: Zipped -> Object
+looseUnmarshallZipped :: HashAlgorithm hash => Zipped -> Object hash
 looseUnmarshallZipped = parseObject . dezip
 
 -- | unmarshall an object as (header, data) tuple from a bytestring
-looseUnmarshallRaw :: L.ByteString -> (ObjectHeader, ObjectData)
+looseUnmarshallRaw :: L.ByteString -> (ObjectHeader hash, ObjectData)
 looseUnmarshallRaw stream =
         case L.findIndex ((==) 0) stream of
                 Nothing  -> error "object not right format. missing 0"
@@ -113,25 +113,25 @@ looseUnmarshallRaw stream =
                                 Just hdr -> (hdr, r)
 
 -- | unmarshall an object as (header, data) tuple from a zipped stream
-looseUnmarshallZippedRaw :: Zipped -> (ObjectHeader, ObjectData)
+looseUnmarshallZippedRaw :: Zipped -> (ObjectHeader hash, ObjectData)
 looseUnmarshallZippedRaw = looseUnmarshallRaw . dezip
 
 -- | read a specific ref from a loose object and returns an header and data.
-looseReadRaw :: LocalPath -> Ref -> IO (ObjectHeader, ObjectData)
+looseReadRaw :: HashAlgorithm hash => LocalPath -> Ref hash -> IO (ObjectHeader hash, ObjectData)
 looseReadRaw repoPath ref = looseUnmarshallZippedRaw <$> readZippedFile (objectPathOfRef repoPath ref)
 
 -- | read only the header of a loose object.
-looseReadHeader :: LocalPath -> Ref -> IO ObjectHeader
+looseReadHeader :: HashAlgorithm hash => LocalPath -> Ref hash -> IO (ObjectHeader hash)
 looseReadHeader repoPath ref = toHeader <$> readZippedFile (objectPathOfRef repoPath ref)
   where
     toHeader = either (error . ("parseHeader: " ++)) id . P.eitherParseChunks parseHeader . L.toChunks . dezip
 
 -- | read a specific ref from a loose object and returns an object
-looseRead :: LocalPath -> Ref -> IO Object
+looseRead :: HashAlgorithm hash => LocalPath -> Ref hash -> IO (Object hash)
 looseRead repoPath ref = looseUnmarshallZipped <$> readZippedFile (objectPathOfRef repoPath ref)
 
 -- | check if a specific ref exists as loose object
-looseExists :: LocalPath -> Ref -> IO Bool
+looseExists :: HashAlgorithm hash => LocalPath -> Ref hash -> IO Bool
 looseExists repoPath ref = isFile (objectPathOfRef repoPath ref)
 
 -- | enumarate all prefixes available in the object store.
@@ -139,19 +139,19 @@ looseEnumeratePrefixes :: LocalPath -> IO [[Char]]
 looseEnumeratePrefixes repoPath = filter isObjectPrefix <$> getDirectoryContents (repoPath </> fromString "objects")
 
 -- | enumerate all references available with a specific prefix.
-looseEnumerateWithPrefixFilter :: LocalPath -> String -> (Ref -> Bool) -> IO [Ref]
+looseEnumerateWithPrefixFilter :: HashAlgorithm hash => LocalPath -> String -> (Ref hash -> Bool) -> IO [Ref hash]
 looseEnumerateWithPrefixFilter repoPath prefix filterF =
         filter filterF . map (fromHexString . (prefix ++)) . filter isRef <$> getDir (repoPath </> fromString "objects" </> fromString prefix)
         where
                 getDir p = E.catch (getDirectoryContents p) (\(_::SomeException) -> return [])
                 isRef l = length l == 38
 
-looseEnumerateWithPrefix :: LocalPath -> String -> IO [Ref]
+looseEnumerateWithPrefix :: HashAlgorithm hash => LocalPath -> String -> IO [Ref hash]
 looseEnumerateWithPrefix repoPath prefix =
         looseEnumerateWithPrefixFilter repoPath prefix (const True)
 
 -- | marshall as lazy bytestring an object except deltas.
-looseMarshall :: Object -> L.ByteString
+looseMarshall :: Object hash -> L.ByteString
 looseMarshall obj
         | objectIsDelta obj = error "cannot write delta object loose"
         | otherwise         = L.concat [ L.fromChunks [hdrB], objData ]
@@ -161,7 +161,7 @@ looseMarshall obj
 
 -- | create a new blob on a temporary location and on success move it to
 -- the object store with its digest name.
-looseWriteBlobFromFile :: LocalPath -> LocalPath -> IO Ref
+looseWriteBlobFromFile :: HashAlgorithm hash => LocalPath -> LocalPath -> IO (Ref hash)
 looseWriteBlobFromFile repoPath file = do
         fsz <- getSize file
         let hdr = objectWriteHeader TypeBlob (fromIntegral fsz)
@@ -184,7 +184,7 @@ looseWriteBlobFromFile repoPath file = do
 
 -- | write an object to disk as a loose reference.
 -- use looseWriteBlobFromFile for efficiently writing blobs when being commited from a file.
-looseWrite :: LocalPath -> Object -> IO Ref
+looseWrite :: HashAlgorithm hash => LocalPath -> Object hash -> IO (Ref hash)
 looseWrite repoPath obj = createParentDirectory path
                        >> isFile path
                        >>= \exists -> unless exists (writeFileLazy path $ compress content)

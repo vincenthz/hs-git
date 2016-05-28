@@ -27,13 +27,13 @@ modifyIORefStrict ref f = do
     let x' = f x
     x' `seq` writeIORef ref x'
 
-data FileWriter = FileWriter
+data FileWriter hash = FileWriter
         { writerHandle  :: Handle
         , writerDeflate :: Deflate
-        , writerDigest  :: IORef (Context SHA1)
+        , writerDigest  :: IORef (Context hash)
         }
 
-fileWriterNew :: Handle -> IO FileWriter
+fileWriterNew :: HashAlgorithm hash => Handle -> IO (FileWriter hash)
 fileWriterNew handle = do
         deflate <- initDeflate defaultCompression defaultWindowBits
         digest  <- newIORef hashInit
@@ -43,7 +43,7 @@ fileWriterNew handle = do
                 , writerDigest  = digest
                 }
 
-withFileWriter :: LocalPath -> (FileWriter -> IO c) -> IO c
+withFileWriter :: HashAlgorithm hash => LocalPath -> (FileWriter hash -> IO c) -> IO c
 withFileWriter path f =
         bracket (openFile path WriteMode) (hClose) $ \handle ->
                 bracket (fileWriterNew handle) (fileWriterClose) f
@@ -51,14 +51,14 @@ withFileWriter path f =
 postDeflate :: Handle -> Maybe B.ByteString -> IO ()
 postDeflate handle = maybe (return ()) (B.hPut handle)
 
-fileWriterOutput :: FileWriter -> B.ByteString -> IO ()
+fileWriterOutput :: HashAlgorithm hash => FileWriter hash -> B.ByteString -> IO ()
 fileWriterOutput (FileWriter { writerHandle = handle, writerDigest = digest, writerDeflate = deflate }) bs = do
         modifyIORefStrict digest (\ctx -> hashUpdate ctx bs)
         (>>= postDeflate handle) =<< feedDeflate deflate bs
 
-fileWriterClose :: FileWriter -> IO ()
+fileWriterClose :: FileWriter hash -> IO ()
 fileWriterClose (FileWriter { writerHandle = handle, writerDeflate = deflate }) =
         postDeflate handle =<< finishDeflate deflate
 
-fileWriterGetDigest :: FileWriter -> IO Ref
+fileWriterGetDigest :: HashAlgorithm hash => FileWriter hash -> IO (Ref hash)
 fileWriterGetDigest (FileWriter { writerDigest = digest }) = (fromDigest . hashFinalize) `fmap` readIORef digest

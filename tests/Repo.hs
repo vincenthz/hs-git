@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
@@ -27,6 +28,9 @@ onLocalRepo f = do
         Nothing -> putStrLn "cannot run this test without repository. clone the original repository for test"
         Just _  -> withCurrentRepo f
 
+doLocalMarshallEq
+    :: Git SHA1
+    -> IO [[Maybe (Ref SHA1, Ref SHA1, (ObjectHeader SHA1, L.ByteString), (ObjectHeader SHA1, L.ByteString))]]
 doLocalMarshallEq git = do
      prefixes <- looseEnumeratePrefixes (gitRepoPath git)
      forM prefixes $ \prefix -> do
@@ -57,7 +61,7 @@ printLocalMarshallError l
                >> exitFailure
 
 main = do
-    onLocalRepo $ \git -> do
+    onLocalRepo $ \(git :: Git SHA1) -> do
         doLocalMarshallEq git >>= printLocalMarshallError . catMaybes . concat
         return ()
     testGitMonadLocal

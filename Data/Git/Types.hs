@@ -170,7 +170,7 @@ type EntPath = [EntName]
 -- | represent one entry in the tree
 -- (permission,file or directory name,blob or tree ref)
 -- name should maybe a filepath, but not sure about the encoding.
-type TreeEnt = (ModePerm,EntName,Ref)
+type TreeEnt hash = (ModePerm,EntName,Ref hash)
 
 -- | an author or committer line
 -- has the format: name <email> time timezone
@@ -183,20 +183,20 @@ data Person = Person
     } deriving (Show,Eq)
 
 -- | Represent a root tree with zero to many tree entries.
-data Tree = Tree { treeGetEnts :: [TreeEnt] } deriving (Show,Eq)
+data Tree hash = Tree { treeGetEnts :: [TreeEnt hash] } deriving (Show,Eq)
 
-instance Monoid Tree where
+instance Monoid (Tree hash) where
     mempty                      = Tree []
     mappend (Tree e1) (Tree e2) = Tree (e1 ++ e2)
     mconcat trees               = Tree $ concatMap treeGetEnts trees
 
 -- | Represent a binary blob.
-data Blob = Blob { blobGetContent :: L.ByteString } deriving (Show,Eq)
+data Blob hash = Blob { blobGetContent :: L.ByteString } deriving (Show,Eq)
 
 -- | Represent a commit object.
-data Commit = Commit
-    { commitTreeish   :: Ref
-    , commitParents   :: [Ref]
+data Commit hash = Commit
+    { commitTreeish   :: Ref hash
+    , commitParents   :: [Ref hash]
     , commitAuthor    :: Person
     , commitCommitter :: Person
     , commitEncoding  :: Maybe ByteString
@@ -210,8 +210,8 @@ data CommitExtra = CommitExtra
     } deriving (Show,Eq)
 
 -- | Represent a signed tag.
-data Tag = Tag
-    { tagRef        :: Ref
+data Tag hash = Tag
+    { tagRef        :: Ref hash
     , tagObjectType :: ObjectType
     , tagBlob       :: ByteString
     , tagName       :: Person
@@ -219,9 +219,9 @@ data Tag = Tag
     } deriving (Show,Eq)
 
 -- | Delta pointing to an offset.
-data DeltaOfs = DeltaOfs Word64 Delta
+data DeltaOfs hash = DeltaOfs Word64 Delta
     deriving (Show,Eq)
 
 -- | Delta pointing to a ref.
-data DeltaRef = DeltaRef Ref Delta
+data DeltaRef hash = DeltaRef (Ref hash) Delta
     deriving (Show,Eq)

@@ -56,10 +56,13 @@ vlf = do
 word32 :: Parser Word32
 word32 = be32 <$> P.take 4
 
-ref, referenceBin, referenceHex :: Parser Ref
+ref, referenceBin, referenceHex :: HashAlgorithm hash => Parser (Ref hash)
 ref = referenceBin
-referenceBin = fromBinary <$> P.take 20
-referenceHex = fromHex <$> P.take 40
+referenceBin = takeDigestSize (error "referenceBin") 1 fromBinary
+referenceHex = takeDigestSize (error "referenceHex") 2 fromHex
+
+takeDigestSize :: HashAlgorithm hash => hash -> Int -> (B.ByteString -> Ref hash) -> Parser (Ref hash)
+takeDigestSize alg modifier constr = constr <$> P.take (modifier * hashDigestSize alg)
 
 decimal :: (Read n, Num n) => Parser n
 decimal = toNum <$> P.takeWhile (\x -> isDigit $ toEnum (fromIntegral x))
