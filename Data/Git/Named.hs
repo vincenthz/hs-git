@@ -122,13 +122,13 @@ readPackedRefs gitRepo constr = do
         accu a l
             | "#" `BC.isPrefixOf` l = a
             | otherwise =
-                let (ref, r) = B.splitAt 40 l
+                let (ref, r) = consumeHexRef hashAlg l
                     name     = UTF8.toString $ B.tail r
                  in case toRefTy name of
                         -- accumulate tag, branch and remotes
-                        RefTag refname    -> a { packedTags    = (refname, fromHex ref) : packedTags a }
-                        RefBranch refname -> a { packedBranchs = (refname, fromHex ref) : packedBranchs a }
-                        RefRemote refname -> a { packedRemotes = (refname, fromHex ref) : packedRemotes a }
+                        RefTag refname    -> a { packedTags    = (refname, ref) : packedTags a }
+                        RefBranch refname -> a { packedBranchs = (refname, ref) : packedBranchs a }
+                        RefRemote refname -> a { packedRemotes = (refname, ref) : packedRemotes a }
                         -- anything else that shouldn't be there get dropped on the floor
                         _                 -> a
 
@@ -176,5 +176,8 @@ readRefFile gitRepo specty = toRefContent <$> readBinaryFile filepath
     where filepath = toPath gitRepo specty
           toRefContent content
             | "ref: " `B.isPrefixOf` content = RefLink $ toRefTy $ UTF8.toString $ head $ BC.lines $ B.drop 5 content
-            | B.length content < 42          = RefDirect $ fromHex $ B.take 40 content
+            | B.length content < 42          = RefDirect $ fst $ consumeHexRef hashAlg content
             | otherwise                      = RefContentUnknown content
+
+consumeHexRef :: HashAlgorithm hash => hash -> B.ByteString -> (Ref hash, B.ByteString)
+consumeHexRef alg b = let (b1,b2) = B.splitAt (hashDigestSize alg * 2) b in (fromHex b1, b2)

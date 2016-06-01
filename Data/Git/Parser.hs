@@ -58,8 +58,8 @@ word32 = be32 <$> P.take 4
 
 ref, referenceBin, referenceHex :: HashAlgorithm hash => Parser (Ref hash)
 ref = referenceBin
-referenceBin = takeDigestSize (error "referenceBin") 1 fromBinary
-referenceHex = takeDigestSize (error "referenceHex") 2 fromHex
+referenceBin = takeDigestSize hashAlg 1 fromBinary
+referenceHex = takeDigestSize hashAlg 2 fromHex
 
 takeDigestSize :: HashAlgorithm hash => hash -> Int -> (B.ByteString -> Ref hash) -> Parser (Ref hash)
 takeDigestSize alg modifier constr = constr <$> P.take (modifier * hashDigestSize alg)

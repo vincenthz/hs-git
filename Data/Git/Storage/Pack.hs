@@ -147,27 +147,27 @@ getNextObjectRaw fr = do
         sobj       <- fileReaderGetPos fr
         (ty, size) <- fileReaderParse fr parseObjectHeader
         extra      <- case ty of
-                TypeDeltaRef -> Just . PtrRef . fromBinary <$> fileReaderGetBS 20 fr
+                TypeDeltaRef -> Just . PtrRef <$> fileReaderGetRef hashAlg fr
                 TypeDeltaOff -> Just . PtrOfs . deltaOffFromList <$> fileReaderGetVLF fr
                 _            -> return Nothing
         objData    <- fileReaderInflateToSize fr size
         eobj       <- fileReaderGetPos fr
 
         return (PackedObjectInfo ty sobj (eobj - sobj) size extra, objData)
-        where
-                parseObjectHeader = do
-                        (m, ty, sz) <- splitFirst <$> P.anyByte
-                        size <- if m then (sz +) <$> getNextSize 4 else return sz
-                        return (ty, size)
-                        where
-                                getNextSize n = do
-                                        (c, sz) <- splitOther n <$> P.anyByte
-                                        if c then (sz +) <$> getNextSize (n+7) else return sz
+  where
+    parseObjectHeader = do
+        (m, ty, sz) <- splitFirst <$> P.anyByte
+        size <- if m then (sz +) <$> getNextSize 4 else return sz
+        return (ty, size)
+      where
+        getNextSize n = do
+            (c, sz) <- splitOther n <$> P.anyByte
+            if c then (sz +) <$> getNextSize (n+7) else return sz
 
-                                splitFirst :: Word8 -> (Bool, ObjectType, Word64)
-                                splitFirst w = (w `testBit` 7, toEnum $ fromIntegral ((w `shiftR` 4) .&. 0x7), fromIntegral (w .&. 0xf))
-                                splitOther n w = (w `testBit` 7, fromIntegral (w .&. 0x7f) `shiftL` n)
+        splitFirst :: Word8 -> (Bool, ObjectType, Word64)
+        splitFirst w = (w `testBit` 7, toEnum $ fromIntegral ((w `shiftR` 4) .&. 0x7), fromIntegral (w .&. 0xf))
+        splitOther n w = (w `testBit` 7, fromIntegral (w .&. 0x7f) `shiftL` n)
 
-                deltaOffFromList (x:xs) = foldl' acc (fromIntegral (x `clearBit` 7)) xs
-                        where acc a w = ((a+1) `shiftL` 7) + fromIntegral (w `clearBit` 7)
-                deltaOffFromList [] = error "cannot happen"
+    deltaOffFromList (x:xs) = foldl' acc (fromIntegral (x `clearBit` 7)) xs
+      where acc a w = ((a+1) `shiftL` 7) + fromIntegral (w `clearBit` 7)
+    deltaOffFromList [] = error "cannot happen"

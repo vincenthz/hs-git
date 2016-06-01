@@ -31,6 +31,8 @@ module Data.Git.Ref
     -- * Hash ByteString types to a ref
     , hash
     , hashLBS
+    , hashAlg
+    , hashAlgFromRef
     ) where
 
 import qualified Crypto.Hash
@@ -126,3 +128,10 @@ hash = Ref . Crypto.Hash.hash
 -- | hash a lazy bytestring into a reference
 hashLBS :: Crypto.Hash.HashAlgorithm hash => L.ByteString -> Ref hash
 hashLBS = Ref . Crypto.Hash.hashlazy
+
+-- | Any hash algorithm
+hashAlg :: Crypto.Hash.HashAlgorithm hash => hash
+hashAlg = error "polymorphic hash algorithm. only to use with hashDigestSize"
+
+hashAlgFromRef :: Crypto.Hash.HashAlgorithm hash => Ref hash -> hash
+hashAlgFromRef _ = hashAlg

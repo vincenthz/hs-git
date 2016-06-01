@@ -16,10 +16,10 @@ module Data.Git.Storage.FileReader
         , fileReaderGet
         , fileReaderGetLBS
         , fileReaderGetBS
+        , fileReaderGetRef
         , fileReaderGetVLF
         , fileReaderSeek
         , fileReaderParse
-
         , fileReaderInflateToSize
         ) where
 
@@ -35,6 +35,7 @@ import Data.IORef
 
 import Data.Git.Imports
 import Data.Git.OS
+import Data.Git.Ref
 import qualified Data.Git.Parser as P
 
 import Data.Data
@@ -42,6 +43,7 @@ import Data.Word
 
 import Codec.Zlib
 import Codec.Zlib.Lowlevel
+import Crypto.Hash
 import Foreign.ForeignPtr
 import qualified Control.Exception as E
 
@@ -124,6 +126,9 @@ fileReaderGetLBS size fb = L.fromChunks <$> fileReaderGet size fb
 
 fileReaderGetBS :: Int -> FileReader -> IO ByteString
 fileReaderGetBS size fb = B.concat <$> fileReaderGet size fb
+
+fileReaderGetRef :: HashAlgorithm hash => hash -> FileReader -> IO (Ref hash)
+fileReaderGetRef alg fr = fromBinary <$> fileReaderGetBS (hashDigestSize alg) fr
 
 -- | seek in a handle, and reset the remaining buffer to empty.
 fileReaderSeek :: FileReader -> Word64 -> IO ()

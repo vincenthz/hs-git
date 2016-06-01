@@ -37,8 +37,11 @@ arbitraryEntname size = entName . B.pack . map fromIntegral <$> replicateM size 
                       , choose (0x30, 0x7f)
                       ]
 
-instance Arbitrary (Ref SHA1) where
-    arbitrary = fromBinary <$> arbitraryBS 20
+arbitraryRef :: HashAlgorithm hash => hash -> Gen (Ref hash)
+arbitraryRef alg = fromBinary <$> arbitraryBS (hashDigestSize alg)
+
+instance HashAlgorithm hash => Arbitrary (Ref hash) where
+    arbitrary = arbitraryRef (error "alg")
 
 arbitraryMsg = arbitraryBSno0 1
 arbitraryLazy = L.fromChunks . (:[]) <$> arbitraryBS 40
