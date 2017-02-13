@@ -2,5 +2,6 @@ dist
 *.o
 *.hi
 Hit
+.stack-work
 .cabal-sandbox
 cabal.sandbox.config
