@@ -95,6 +95,7 @@ Test-Suite test-repository
   type:              exitcode-stdio-1.0
   hs-source-dirs:    tests
   Main-Is:           Repo.hs
+  other-modules:     Monad
   Build-depends:     base >= 3 && < 7
                    , bytestring
                    , tasty
