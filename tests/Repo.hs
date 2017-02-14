@@ -63,5 +63,5 @@ printLocalMarshallError l
 main = do
     onLocalRepo $ \(git :: Git SHA1) -> do
         doLocalMarshallEq git >>= printLocalMarshallError . catMaybes . concat
+        testGitMonadLocal
         return ()
-    testGitMonadLocal
