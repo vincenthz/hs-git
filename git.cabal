@@ -40,7 +40,7 @@ Library
                    , byteable
                    , containers
                    , memory >= 0.13
-                   , cryptonite
+                   , cryptonite >= 0.22
                    , vector
                    , random
                    , zlib
