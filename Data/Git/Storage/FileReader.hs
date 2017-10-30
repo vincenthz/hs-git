@@ -41,8 +41,8 @@ import qualified Data.Git.Parser as P
 import Data.Data
 import Data.Word
 
-import Codec.Zlib
-import Codec.Zlib.Lowlevel
+import Data.Streaming.Zlib
+import Data.Streaming.Zlib.Lowlevel
 import Crypto.Hash
 import Foreign.ForeignPtr
 import qualified Control.Exception as E
@@ -92,10 +92,14 @@ fileReaderGetNext fb = do
         b <- B.hGet (fbHandle fb) 4096
         if B.null b
             then finishInflate (fbInflate fb)
-            else (>>= maybe inflateTillPop return) =<< feedInflate (fbInflate fb) b
+            else (>>= handlePopperRes) =<< feedInflate (fbInflate fb) b
     nothingOnNull b
         | B.null b  = Nothing
         | otherwise = Just b
+    handlePopperRes res = case res of
+        PRDone -> inflateTillPop
+        PRNext bs -> return bs
+        PRError e -> throwIO e
 
 fileReaderGetPos :: FileReader -> IO Word64
 fileReaderGetPos fr = do
