@@ -11,8 +11,8 @@ import Data.Git.Ref
 import Data.Git.OS
 import Data.IORef
 import qualified Data.ByteString as B
-import Codec.Zlib
-import Control.Exception (bracket)
+import Data.Streaming.Zlib
+import Control.Exception (bracket, throwIO)
 
 import Crypto.Hash
 
@@ -48,8 +48,11 @@ withFileWriter path f =
         bracket (openFile path WriteMode) (hClose) $ \handle ->
                 bracket (fileWriterNew handle) (fileWriterClose) f
 
-postDeflate :: Handle -> Maybe B.ByteString -> IO ()
-postDeflate handle = maybe (return ()) (B.hPut handle)
+postDeflate :: Handle -> PopperRes -> IO ()
+postDeflate handle res = case res of
+        PRDone -> return ()
+        PRNext bs -> B.hPut handle bs
+        PRError e -> throwIO e
 
 fileWriterOutput :: HashAlgorithm hash => FileWriter hash -> B.ByteString -> IO ()
 fileWriterOutput (FileWriter { writerHandle = handle, writerDigest = digest, writerDeflate = deflate }) bs = do
