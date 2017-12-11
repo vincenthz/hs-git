@@ -167,6 +167,7 @@ initRepo path = do
     exists <- isDirectory path
     when exists $ error "destination directory already exists"
     createParentDirectory path
+    createDirectory False path
     mapM_ (createDirectory False . (path </>))
         [ "branches", "hooks", "info"
         , "logs", "objects", "refs"
