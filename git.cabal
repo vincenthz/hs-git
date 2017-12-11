@@ -25,14 +25,6 @@ Cabal-Version:       >=1.8
 data-files:          README.md
 extra-source-files:  tests/*.hs
 
-Flag executable
-  Description:       Build the executable
-  Default:           False
-
-Flag debug
-  Description:       Add some debugging options
-  Default:           False
-
 Library
   Build-Depends:     base >= 4 && < 5
                    , bytestring >= 0.9
