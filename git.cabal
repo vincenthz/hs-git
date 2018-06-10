@@ -43,6 +43,8 @@ Library
                    -- to remove
                    , system-filepath
                    , system-fileio
+  if !impl(ghc >= 8.0)
+    build-depends: semigroups == 0.18.*
   Exposed-modules:   Data.Git
                      Data.Git.Monad
                      Data.Git.Types

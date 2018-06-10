@@ -5,6 +5,7 @@
 -- Stability   : experimental
 -- Portability : unix
 --
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 module Data.Git.Types
     (
@@ -42,6 +43,8 @@ import Data.Word
 import Data.Bits
 import Data.Byteable
 import Data.String
+import Data.Semigroup (Semigroup(..))
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
@@ -185,9 +188,15 @@ data Person = Person
 -- | Represent a root tree with zero to many tree entries.
 data Tree hash = Tree { treeGetEnts :: [TreeEnt hash] } deriving (Show,Eq)
 
+instance Semigroup (Tree hash) where
+    Tree e1 <> Tree e2          = Tree (e1 ++ e2)
+    sconcat (tree:|trees)     = Tree $ concatMap treeGetEnts (tree:trees)
+
 instance Monoid (Tree hash) where
     mempty                      = Tree []
+#if !(MIN_VERSION_base(4,11,0))
     mappend (Tree e1) (Tree e2) = Tree (e1 ++ e2)
+#endif
     mconcat trees               = Tree $ concatMap treeGetEnts trees
 
 -- | Represent a binary blob.
