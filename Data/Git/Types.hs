@@ -185,11 +185,6 @@ data Person = Person
 -- | Represent a root tree with zero to many tree entries.
 data Tree hash = Tree { treeGetEnts :: [TreeEnt hash] } deriving (Show,Eq)
 
-instance Monoid (Tree hash) where
-    mempty                      = Tree []
-    mappend (Tree e1) (Tree e2) = Tree (e1 ++ e2)
-    mconcat trees               = Tree $ concatMap treeGetEnts trees
-
 -- | Represent a binary blob.
 data Blob hash = Blob { blobGetContent :: L.ByteString } deriving (Show,Eq)
 
