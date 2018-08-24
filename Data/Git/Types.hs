@@ -69,8 +69,8 @@ data ObjectType =
 -- | Git time is number of seconds since unix epoch in the UTC zone with
 -- the current timezone associated
 data GitTime = GitTime
-    { gitTimeUTC      :: Elapsed
-    , gitTimeTimezone :: TimezoneOffset
+    { gitTimeUTC      :: !Elapsed
+    , gitTimeTimezone :: !TimezoneOffset
     } deriving (Eq)
 
 instance Timeable GitTime where
@@ -177,46 +177,46 @@ type TreeEnt hash = (ModePerm,EntName,Ref hash)
 -- FIXME: should be a string, but I don't know if the data is stored
 -- consistantly in one encoding (UTF8)
 data Person = Person
-    { personName  :: ByteString
-    , personEmail :: ByteString
-    , personTime  :: GitTime
+    { personName  :: !ByteString
+    , personEmail :: !ByteString
+    , personTime  :: !GitTime
     } deriving (Show,Eq)
 
 -- | Represent a root tree with zero to many tree entries.
-data Tree hash = Tree { treeGetEnts :: [TreeEnt hash] } deriving (Show,Eq)
+newtype Tree hash = Tree { treeGetEnts :: [TreeEnt hash] } deriving (Show,Eq)
 
 -- | Represent a binary blob.
-data Blob hash = Blob { blobGetContent :: L.ByteString } deriving (Show,Eq)
+newtype Blob hash = Blob { blobGetContent :: L.ByteString } deriving (Show,Eq)
 
 -- | Represent a commit object.
 data Commit hash = Commit
-    { commitTreeish   :: Ref hash
+    { commitTreeish   :: !(Ref hash)
     , commitParents   :: [Ref hash]
-    , commitAuthor    :: Person
-    , commitCommitter :: Person
+    , commitAuthor    :: !Person
+    , commitCommitter :: !Person
     , commitEncoding  :: Maybe ByteString
     , commitExtras    :: [CommitExtra]
-    , commitMessage   :: ByteString
+    , commitMessage   :: !ByteString
     } deriving (Show,Eq)
 
 data CommitExtra = CommitExtra
-    { commitExtraKey   :: ByteString
-    , commitExtraValue :: ByteString
+    { commitExtraKey   :: !ByteString
+    , commitExtraValue :: !ByteString
     } deriving (Show,Eq)
 
 -- | Represent a signed tag.
 data Tag hash = Tag
-    { tagRef        :: Ref hash
-    , tagObjectType :: ObjectType
-    , tagBlob       :: ByteString
-    , tagName       :: Person
-    , tagS          :: ByteString
+    { tagRef        :: !(Ref hash)
+    , tagObjectType :: !ObjectType
+    , tagBlob       :: !ByteString
+    , tagName       :: !Person
+    , tagS          :: !ByteString
     } deriving (Show,Eq)
 
 -- | Delta pointing to an offset.
-data DeltaOfs hash = DeltaOfs Word64 Delta
+data DeltaOfs hash = DeltaOfs !Word64 !Delta
     deriving (Show,Eq)
 
 -- | Delta pointing to a ref.
-data DeltaRef hash = DeltaRef (Ref hash) Delta
+data DeltaRef hash = DeltaRef !(Ref hash) !Delta
     deriving (Show,Eq)

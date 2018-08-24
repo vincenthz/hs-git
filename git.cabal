@@ -27,6 +27,7 @@ extra-source-files:  tests/*.hs
 
 Library
   Build-Depends:     base >= 4 && < 5
+                   , basement
                    , bytestring >= 0.9
                    , byteable
                    , containers
