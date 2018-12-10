@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 -- |
 -- Module      : Data.Git.Diff
 -- License     : BSD-style
@@ -36,7 +38,11 @@ import Data.Git.Storage.Object
 import Data.ByteString.Lazy.Char8 as L
 
 import Data.Typeable
+#if MIN_VERSION_patience(0,2,0)
+import Patience as AP (Item(..), diff)
+#else
 import Data.Algorithm.Patience as AP (Item(..), diff)
+#endif
 
 -- | represents a blob's content (i.e., the content of a file at a given
 -- reference).
