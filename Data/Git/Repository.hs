@@ -42,7 +42,7 @@ module Data.Git.Repository
 import Control.Exception (Exception, throw)
 
 import Data.Maybe (fromMaybe)
-import Data.List (find)
+import Data.List (find, stripPrefix)
 import Data.Data
 import Data.IORef
 
@@ -129,7 +129,11 @@ resolveRevision git (Revision prefix modifiers) =
                              "HEAD"       -> [ RefHead ]
                              "ORIG_HEAD"  -> [ RefOrigHead ]
                              "FETCH_HEAD" -> [ RefFetchHead ]
-                             _            -> map (flip ($) (RefName prefix)) [RefTag,RefBranch,RefRemote]
+                             _            ->
+                                maybe (map (flip ($) (RefName prefix)) [RefTag,RefBranch,RefRemote]) (:[]) $
+                                        (RefBranch . RefName <$> stripPrefix "refs/heads/"   prefix)
+                                    <|> (RefTag    . RefName <$> stripPrefix "refs/tags/"    prefix)
+                                    <|> (RefRemote . RefName <$> stripPrefix "refs/remotes/" prefix)
 
         tryResolvers :: HashAlgorithm hash => [IO (Maybe (Ref hash))] -> IO (Maybe (Ref hash))
         tryResolvers []            = return $ if (isHexString prefix)
