@@ -142,7 +142,7 @@ listRefs root = listRefsAcc [] root
         getRefsRecursively dir acc (x:xs) = do
             isDir <- isDirectory x
             extra <- if isDir
-                        then listRefsAcc [] dir
+                        then listRefsAcc [] x
                         else let r = UTF8.toString $ localPathEncode $ stripRoot x
                               in if isValidRefName r
                                     then return [fromString r]
