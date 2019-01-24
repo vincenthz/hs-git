@@ -36,7 +36,8 @@ import Data.Git.Storage.Object
 import Data.ByteString.Lazy.Char8 as L
 
 import Data.Typeable
-import Data.Algorithm.Patience as AP (Item(..), diff)
+import Data.Git.Diff.Patience (Item(..), diff)
+
 
 -- | represents a blob's content (i.e., the content of a file at a given
 -- reference).
@@ -257,22 +258,21 @@ diffGetContext context list =
     let (_, _, filteredDiff) = Prelude.foldr filterContext (0, AccuBottom, []) list
         theList = removeTrailingBoth filteredDiff
     in case Prelude.head theList of
-        (NormalLine (Both l1 _)) -> if (lineNumber l1) > 1 then Separator:theList
-                                                           else theList
+        (NormalLine (Both l _)) -> if lineNumber l > 1 then Separator:theList else theList
         _ -> theList
     where -- only keep 'context'. The file is annalyzed from the bottom to the top.
           -- The accumulator here is a tuple3 with (the line counter, the
           -- direction and the list of elements)
           filterContext :: (Item TextLine) -> (Int, GitAccu, [FilteredDiff]) -> (Int, GitAccu, [FilteredDiff])
-          filterContext (Both l1 l2) (c, AccuBottom, acc) =
-              if c < context then (c+1, AccuBottom, (NormalLine (Both l1 l2)):acc)
-                             else (c  , AccuBottom, (NormalLine (Both l1 l2))
+          filterContext b@(Both {}) (c, AccuBottom, acc) =
+              if c < context then (c+1, AccuBottom, (NormalLine b):acc)
+                             else (c  , AccuBottom, (NormalLine b)
                                                     :((Prelude.take (context-1) acc)
                                                     ++ [Separator]
                                                     ++ (Prelude.drop (context+1) acc)))
-          filterContext (Both l1 l2) (c, AccuTop, acc) =
-              if c < context then (c+1, AccuTop   , (NormalLine (Both l1 l2)):acc)
-                             else (0  , AccuBottom, (NormalLine (Both l1 l2)):acc)
+          filterContext b@(Both {}) (c, AccuTop, acc) =
+              if c < context then (c+1, AccuTop   , (NormalLine b):acc)
+                             else (0  , AccuBottom, (NormalLine b):acc)
           filterContext element (_, _, acc) =
               (0, AccuTop, (NormalLine element):acc)
 
@@ -281,8 +281,8 @@ diffGetContext context list =
           startWithSeparator (Separator:_) = True
           startWithSeparator ((NormalLine l):xs) =
               case l of
-                  (Both _ _) -> startWithSeparator xs
-                  _          -> False
+                  Both {} -> startWithSeparator xs
+                  _       -> False
 
           removeTrailingBoth :: [FilteredDiff] -> [FilteredDiff]
           removeTrailingBoth diffList =
