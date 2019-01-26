@@ -45,7 +45,6 @@ import Data.Git.Types
 import Data.Git.Imports
 import qualified Data.Git.Parser as P
 
-import Data.Byteable (toBytes)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
