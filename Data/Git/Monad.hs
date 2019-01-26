@@ -581,8 +581,8 @@ deleteFile path = do
 --
 -- Example:
 --
--- > withCurrentRepo $
--- >    (r, ()) <- withNewCommit person Nothing $ do
+-- > withCurrentRepo $ do
+-- >    (r, ()) <- withNewCommit person (Nothing :: Maybe (Ref SHA1)) $ do
 -- >        setMessage "inital commit"
 -- >        setFile ["README.md"] "# My awesome project\n\nthis is a new project\n"
 -- >    branchWrite "master" r
@@ -592,7 +592,7 @@ deleteFile path = do
 -- parent is already set to the Reference associated to the revision.
 -- You can, change the parents if you wish to erase, or replace, this value.
 --
--- > withCurrentRepo $
+-- > withCurrentRepo $ do
 -- >    readmeContent <- withCommit (Just "master") $ getFile ["README.md"]
 -- >    (r, ()) <- withNewCommit person (Just "master") $ do
 -- >        setMessage "update the README"
