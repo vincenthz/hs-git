@@ -40,7 +40,6 @@ Library
                    , hourglass >= 0.2
                    , unix-compat
                    , utf8-string
-                   , patience
                    -- to remove
                    , system-filepath
                    , system-fileio
@@ -58,6 +57,7 @@ Library
                      Data.Git.Revision
                      Data.Git.Repository
                      Data.Git.Diff
+                     Data.Git.Diff.Patience
   Other-modules:     Data.Git.Internal
                      Data.Git.Imports
                      Data.Git.OS

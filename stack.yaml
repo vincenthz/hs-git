@@ -1,5 +1,4 @@
-resolver: lts-12.7
+resolver: lts-12.21
 packages:
 - .
-extra-deps:
-- patience-0.1.1
+extra-deps: []
