@@ -5,6 +5,7 @@
 -- Stability   : experimental
 -- Portability : unix
 --
+{-# LANGUAGE BangPatterns #-}
 module Data.Git.Delta
     ( Delta(..)
     , DeltaCmd(..)
@@ -22,13 +23,13 @@ import qualified Data.Git.Parser as P
 import           Data.Git.Imports
 
 -- | a delta is a source size, a destination size and a list of delta cmd
-data Delta = Delta Word64 Word64 [DeltaCmd]
+data Delta = Delta !Word64 !Word64 ![DeltaCmd]
     deriving (Show,Eq)
 
 -- | possible commands in a delta
 data DeltaCmd =
-      DeltaCopy ByteString   -- command to insert this bytestring
-    | DeltaSrc Word64 Word64 -- command to copy from source (offset, size)
+      DeltaCopy !ByteString   -- command to insert this bytestring
+    | DeltaSrc !Word64 !Word64 -- command to copy from source (offset, size)
     deriving (Show,Eq)
 
 -- | parse a delta.
@@ -62,8 +63,9 @@ deltaParse = do
                 let size   = s1 .|. s2 .|. s3
                 return $ DeltaSrc offset (if size == 0 then 0x10000 else size)
             | otherwise       = DeltaCopy <$> P.take (fromIntegral cmd)
-        word8cond cond sh =
-            if cond then (flip shiftL sh . fromIntegral) <$> P.anyByte else return 0
+
+        word8cond False _  = return 0
+        word8cond True  sh = flip shiftL sh . fromIntegral <$> P.anyByte
 
 -- | read one delta from a lazy bytestring.
 deltaRead :: [ByteString] -> Maybe Delta
