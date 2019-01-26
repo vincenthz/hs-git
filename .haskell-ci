@@ -1,7 +1,8 @@
 # compiler supported and their equivalent LTS
 compiler: ghc-8.0 lts-9.21
 compiler: ghc-8.2 lts-11.22
-compiler: ghc-8.4 lts-12.7
+compiler: ghc-8.4 lts-12.26
+compiler: ghc-8.6 lts-13.5
 
 # gitdep: name location commit
 
@@ -11,17 +12,17 @@ compiler: ghc-8.4 lts-12.7
 # builds
 # recognized simple options: nohaddock allow-newer allowed-failure
 # kvs options: flag=pkg:flagname extradep=package-version gitdep=name
-build: ghc-8.2
 build: ghc-8.0
-build: ghc-8.0 os=osx
-build: ghc-8.4 extradep=patience-0.1.1
+build: ghc-8.2
+build: ghc-8.4
+build: ghc-8.6 os=osx,linux,windows
 
 # packages
 package: '.'
 
 # extra builds
-hlint: allowed-failure
-weeder: allowed-failure
+hlint: false
+weeder: false
 coverall: false
 
 # travis extra
