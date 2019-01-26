@@ -19,6 +19,7 @@ module Data.Git.Types
     , Person(..)
     , EntName
     , entName
+    , getEntNameBytes
     , EntPath
     , entPathAppend
     -- * modeperm type
@@ -40,7 +41,6 @@ module Data.Git.Types
 
 import Data.Word
 import Data.Bits
-import Data.Byteable
 import Data.String
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -147,14 +147,12 @@ data FilePermissions = FilePermissions
 type Perm = Word8
 
 -- | Entity name
-newtype EntName = EntName ByteString
+newtype EntName = EntName { getEntNameBytes :: ByteString }
     deriving (Eq,Ord)
 instance Show EntName where
     show (EntName e) = UTF8.toString e
 instance IsString EntName where
     fromString s = entName $ UTF8.fromString s
-instance Byteable EntName where
-    toBytes (EntName n) = n
 
 entName :: ByteString -> EntName
 entName bs

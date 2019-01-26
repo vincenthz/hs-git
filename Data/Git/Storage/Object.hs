@@ -265,7 +265,7 @@ treeWrite (Tree ents) = toLazyByteString $ mconcat $ concatMap writeTreeEnt ents
     where writeTreeEnt (ModePerm perm,name,ref) =
                 [ string7 (printf "%o" perm)
                 , string7 " "
-                , byteString $ toBytes name
+                , byteString $ getEntNameBytes name
                 , string7 "\0"
                 , byteString $ toBinary ref
                 ]

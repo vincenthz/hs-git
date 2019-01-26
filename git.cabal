@@ -29,7 +29,6 @@ Library
   Build-Depends:     base >= 4 && < 5
                    , basement
                    , bytestring >= 0.9
-                   , byteable
                    , containers
                    , memory >= 0.13
                    , cryptonite >= 0.22
