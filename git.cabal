@@ -57,6 +57,7 @@ Library
                      Data.Git.Repository
                      Data.Git.Diff
                      Data.Git.Diff.Patience
+                     Data.Git.Index
   Other-modules:     Data.Git.Internal
                      Data.Git.Imports
                      Data.Git.OS

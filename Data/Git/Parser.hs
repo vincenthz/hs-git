@@ -7,6 +7,7 @@ module Data.Git.Parser
     , maybeParse
     , maybeParseChunks
     -- * Specific functions
+    , word16
     , word32
     , ref
     , referenceBin
@@ -35,7 +36,7 @@ import qualified Data.ByteArray.Parse as P
 import           Data.ByteArray (ByteArray)
 
 import           Data.Bits
-import           Data.Word (Word8, Word32)
+import           Data.Word (Word8, Word16, Word32)
 import           Data.Char (isDigit)
 
 import qualified Data.ByteString as B
@@ -55,6 +56,9 @@ vlf = do
 
 word32 :: Parser Word32
 word32 = be32 <$> P.take 4
+
+word16 :: Parser Word16
+word16 = be16 <$> P.take 2
 
 ref, referenceBin, referenceHex :: HashAlgorithm hash => Parser (Ref hash)
 ref = referenceBin
