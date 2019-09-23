@@ -22,6 +22,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE CPP #-}
 
 module Data.Git.Monad
     ( -- * GitMonad
@@ -75,6 +76,7 @@ module Data.Git.Monad
     ) where
 
 
+import qualified Control.Monad.Fail as Fail
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -127,7 +129,7 @@ instance Resolvable Git.RefName where
 
 -- | Basic operations common between the different Monads defined in this
 -- package.
-class (Functor m, Applicative m, Monad m) => GitMonad m where
+class (Functor m, Applicative m, Fail.MonadFail m) => GitMonad m where
     -- | the current Monad must allow access to the current Git
     getGit :: m (Git.Git SHA1)
     liftGit :: IO a -> m a
@@ -240,7 +242,12 @@ instance Applicative GitM where
 instance Monad GitM where
     return = returnGitM
     (>>=)  = bindGitM
-    fail   = failGitM
+#if !(MIN_VERSION_base(4,13,0))
+    fail   = Fail.fail
+#endif
+
+instance Fail.MonadFail GitM where
+    fail = failGitM
 
 instance GitMonad GitM where
     getGit  = getGitM
@@ -313,7 +320,12 @@ instance Applicative CommitAccessM where
 instance Monad CommitAccessM where
     return = returnCommitAccessM
     (>>=)  = bindCommitAccessM
-    fail   = failCommitAccessM
+#if !(MIN_VERSION_base(4,13,0))
+    fail   = Fail.fail
+#endif
+
+instance Fail.MonadFail CommitAccessM where
+    fail = failCommitAccessM
 
 instance GitMonad CommitAccessM where
     getGit  = getCommitAccessM
@@ -474,7 +486,12 @@ instance Applicative CommitM where
 instance Monad CommitM where
     return = returnCommitM
     (>>=)  = bindCommitM
-    fail   = failCommitM
+#if !(MIN_VERSION_base(4,13,0))
+    fail   = Fail.fail
+#endif
+
+instance Fail.MonadFail CommitM where
+    fail = failCommitM
 
 instance GitMonad CommitM where
     getGit  = getCommitM
