@@ -112,14 +112,14 @@ findRepoMaybe :: IO (Maybe LocalPath)
 findRepoMaybe = do
     menvDir <- E.catch (Just <$> getEnvAsPath "GIT_DIR") (\(_:: SomeException) -> return Nothing)
     case menvDir of
-        Nothing     -> getWorkingDirectory >>= checkDir 0
+        Nothing     -> getWorkingDirectory >>= \pwd -> checkDir 0 (pwd </> ".git")
         Just envDir -> isRepo envDir >>= \e -> return (if e then Just envDir else Nothing)
   where checkDir :: Int -> LocalPath -> IO (Maybe LocalPath)
         checkDir 128 _  = return Nothing
-        checkDir n   wd = do
-            let filepath = wd </> ".git"
+        checkDir n   fp = do
+            let filepath = fp </> ".git"
             e <- isRepo filepath
-            if e then return (Just filepath) else checkDir (n+1) (if absolute wd then parent wd else wd </> "..")
+            if e then return (Just fp) else checkDir (n+1) (if absolute fp then parent fp else fp </> "..")
 
 -- | Find the git repository from the current directory.
 --
@@ -129,17 +129,16 @@ findRepo :: IO LocalPath
 findRepo = do
     menvDir <- E.catch (Just <$> getEnvAsPath "GIT_DIR") (\(_:: SomeException) -> return Nothing)
     case menvDir of
-        Nothing     -> getWorkingDirectory >>= checkDir 0
+        Nothing     -> getWorkingDirectory >>= \pwd -> checkDir 0 (pwd </> ".git")
         Just envDir -> do
             e <- isRepo envDir
             when (not e) $ error "environment GIT_DIR is not a git repository"
             return envDir
   where checkDir :: Int -> LocalPath -> IO LocalPath
         checkDir 128 _  = error "not a git repository"
-        checkDir n   wd = do
-            let filepath = wd </> ".git"
-            e <- isRepo filepath
-            if e then return filepath else checkDir (n+1) (if absolute wd then parent wd else wd </> "..")
+        checkDir n   fp = do
+            e <- isRepo fp
+            if e then return fp else checkDir (n+1) (if absolute fp then parent fp else fp </> "..")
 
 -- | execute a function f with a git context.
 withRepo :: LocalPath -> (Git SHA1 -> IO c) -> IO c
