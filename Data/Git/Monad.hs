@@ -127,7 +127,7 @@ instance Resolvable Git.RefName where
 
 -- | Basic operations common between the different Monads defined in this
 -- package.
-class (Functor m, Applicative m, Monad m) => GitMonad m where
+class (Functor m, Applicative m, Monad m, MonadFail m) => GitMonad m where
     -- | the current Monad must allow access to the current Git
     getGit :: m (Git.Git SHA1)
     liftGit :: IO a -> m a
@@ -240,6 +240,7 @@ instance Applicative GitM where
 instance Monad GitM where
     return = returnGitM
     (>>=)  = bindGitM
+instance MonadFail GitM where
     fail   = failGitM
 
 instance GitMonad GitM where
@@ -313,6 +314,7 @@ instance Applicative CommitAccessM where
 instance Monad CommitAccessM where
     return = returnCommitAccessM
     (>>=)  = bindCommitAccessM
+instance MonadFail CommitAccessM where
     fail   = failCommitAccessM
 
 instance GitMonad CommitAccessM where
@@ -474,6 +476,7 @@ instance Applicative CommitM where
 instance Monad CommitM where
     return = returnCommitM
     (>>=)  = bindCommitM
+instance MonadFail CommitM where
     fail   = failCommitM
 
 instance GitMonad CommitM where
