@@ -60,6 +60,14 @@ script:
         echo "{ resolver: lts-13.7, packages: [ '.' ], extra-deps: [], flags: {} }" > stack.yaml
         stack --no-terminal build --install-ghc --coverage --test --bench --no-run-benchmarks --haddock --no-haddock-deps
         ;;
+      ghc-8.8)
+        echo "{ resolver: lts-16.31, packages: [ '.' ], extra-deps: [], flags: {} }" > stack.yaml
+        stack --no-terminal build --install-ghc --coverage --test --bench --no-run-benchmarks --haddock --no-haddock-deps
+        ;;
+      ghc-8.10)
+        echo "{ resolver: lts-17.10, packages: [ '.' ], extra-deps: [], flags: {} }" > stack.yaml
+        stack --no-terminal build --install-ghc --coverage --test --bench --no-run-benchmarks --haddock --no-haddock-deps
+        ;;
       esac
       ;;
     hlint)

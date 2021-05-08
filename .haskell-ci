@@ -3,6 +3,8 @@ compiler: ghc-8.0 lts-9.21
 compiler: ghc-8.2 lts-11.22
 compiler: ghc-8.4 lts-12.26
 compiler: ghc-8.6 lts-13.5
+compiler: ghc-8.8 lts-16.31
+compiler: ghc-8.10 lts-17.10
 
 # gitdep: name location commit
 
@@ -16,6 +18,8 @@ build: ghc-8.0
 build: ghc-8.2
 build: ghc-8.4
 build: ghc-8.6 os=osx,linux,windows
+build: ghc-8.8 os=osx,linux,windows
+build: ghc-8.10 os=osx,linux,windows
 
 # packages
 package: '.'
