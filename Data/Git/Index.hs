@@ -9,9 +9,6 @@ module Data.Git.Index
     , indexEntryOfFile
     ) where
 
-import Prelude hiding ( FilePath, readFile )
-import Filesystem
-import Filesystem.Path hiding (concat)
 import Control.Monad( when
                     , replicateM
                     )
@@ -57,7 +54,7 @@ indexEntryOfFile :: HashAlgorithm hash => B.ByteString -> V.Vector (IndexEntry h
 indexEntryOfFile path vec = binarySearchBy (compare . fileName) vec path
 
 loadIndexFile :: HashAlgorithm hash => FilePath -> IO (Either String (V.Vector (IndexEntry hash)))
-loadIndexFile path = (decodeIndex <$> readFile path) `E.catch` onError
+loadIndexFile path = (decodeIndex <$> BC.readFile path) `E.catch` onError
   where
     onError :: E.SomeException -> IO (Either String a)
     onError _ = return $ Left "Cannot find index file"

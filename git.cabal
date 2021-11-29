@@ -39,9 +39,9 @@ Library
                    , hourglass >= 0.2
                    , unix-compat
                    , utf8-string
-                   -- to remove
-                   , system-filepath
-                   , system-fileio
+                   , directory >= 1.2.5.0
+                   , filepath
+                   , unix
   Exposed-modules:   Data.Git
                      Data.Git.Monad
                      Data.Git.Types

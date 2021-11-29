@@ -132,7 +132,7 @@ looseRead repoPath ref = looseUnmarshallZipped <$> readZippedFile (objectPathOfR
 
 -- | check if a specific ref exists as loose object
 looseExists :: HashAlgorithm hash => LocalPath -> Ref hash -> IO Bool
-looseExists repoPath ref = isFile (objectPathOfRef repoPath ref)
+looseExists repoPath ref = doesFileExist (objectPathOfRef repoPath ref)
 
 -- | enumarate all prefixes available in the object store.
 looseEnumeratePrefixes :: LocalPath -> IO [[Char]]
@@ -163,7 +163,7 @@ looseMarshall obj
 -- the object store with its digest name.
 looseWriteBlobFromFile :: HashAlgorithm hash => LocalPath -> LocalPath -> IO (Ref hash)
 looseWriteBlobFromFile repoPath file = do
-        fsz <- getSize file
+        fsz <- getFileSize file
         let hdr = objectWriteHeader TypeBlob (fromIntegral fsz)
         tmpPath <- objectTemporaryPath repoPath
         flip onException (removeFile tmpPath) $ do
@@ -172,9 +172,9 @@ looseWriteBlobFromFile repoPath file = do
                         withFile file ReadMode $ \h -> loop h fw
                         digest <- fileWriterGetDigest fw
                         return (digest, objectPathOfRef repoPath digest)
-                exists <- isFile npath
+                exists <- doesFileExist npath
                 when exists $ error "destination already exists"
-                rename tmpPath npath
+                renameFile tmpPath npath
                 return ref
     where loop h fw = do
                 r <- B.hGet h (32*1024)
@@ -186,7 +186,7 @@ looseWriteBlobFromFile repoPath file = do
 -- use looseWriteBlobFromFile for efficiently writing blobs when being commited from a file.
 looseWrite :: HashAlgorithm hash => LocalPath -> Object hash -> IO (Ref hash)
 looseWrite repoPath obj = createParentDirectory path
-                       >> isFile path
+                       >> doesFileExist path
                        >>= \exists -> unless exists (writeFileLazy path $ compress content)
                        >> return ref
         where

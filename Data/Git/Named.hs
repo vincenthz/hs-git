@@ -114,7 +114,7 @@ readPackedRefs :: HashAlgorithm hash
                -> ([(RefName, Ref hash)] -> a)
                -> IO (PackedRefs a)
 readPackedRefs gitRepo constr = do
-    exists <- isFile (packedRefsPath gitRepo)
+    exists <- doesFileExist (packedRefsPath gitRepo)
     if exists then readLines else return $ finalize emptyPackedRefs
   where emptyPackedRefs = PackedRefs [] [] []
         readLines = finalize . foldl accu emptyPackedRefs . BC.lines <$> readBinaryFile (packedRefsPath gitRepo)
@@ -140,10 +140,10 @@ listRefs root = listRefsAcc [] root
             getRefsRecursively dir acc files
         getRefsRecursively _   acc []     = return acc
         getRefsRecursively dir acc (x:xs) = do
-            isDir <- isDirectory x
+            isDir <- doesDirectoryExist x
             extra <- if isDir
                         then listRefsAcc [] x
-                        else let r = UTF8.toString $ localPathEncode $ stripRoot x
+                        else let r = stripRoot x
                               in if isValidRefName r
                                     then return [fromString r]
                                     else return []
@@ -160,7 +160,7 @@ looseRemotesList :: LocalPath -> IO [RefName]
 looseRemotesList gitRepo = listRefs (remotesPath gitRepo)
 
 existsRefFile :: LocalPath -> RefSpecTy -> IO Bool
-existsRefFile gitRepo specty = isFile $ toPath gitRepo specty
+existsRefFile gitRepo specty = doesFileExist $ toPath gitRepo specty
 
 writeRefFile :: LocalPath -> RefSpecTy -> RefContentTy hash -> IO ()
 writeRefFile gitRepo specty refcont = do

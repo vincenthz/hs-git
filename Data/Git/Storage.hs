@@ -119,7 +119,7 @@ findRepoMaybe = do
         checkDir n   wd = do
             let filepath = wd </> ".git"
             e <- isRepo filepath
-            if e then return (Just filepath) else checkDir (n+1) (if absolute wd then parent wd else wd </> "..")
+            if e then return (Just filepath) else checkDir (n+1) (if isAbsolute wd then takeDirectory wd else wd </> "..")
 
 -- | Find the git repository from the current directory.
 --
@@ -139,7 +139,7 @@ findRepo = do
         checkDir n   wd = do
             let filepath = wd </> ".git"
             e <- isRepo filepath
-            if e then return filepath else checkDir (n+1) (if absolute wd then parent wd else wd </> "..")
+            if e then return filepath else checkDir (n+1) (if isAbsolute wd then takeDirectory wd else wd </> "..")
 
 -- | execute a function f with a git context.
 withRepo :: LocalPath -> (Git SHA1 -> IO c) -> IO c
@@ -154,8 +154,8 @@ withCurrentRepo f = findRepo >>= \path -> withRepo path f
 -- | basic checks to see if a specific path looks like a git repo.
 isRepo :: LocalPath -> IO Bool
 isRepo path = do
-    dir     <- isDirectory path
-    subDirs <- mapM (isDirectory . (path </>))
+    dir     <- doesDirectoryExist path
+    subDirs <- mapM (doesDirectoryExist . (path </>))
                     [ "hooks", "info"
                     , "objects", "refs"
                     , "refs"</> "heads", "refs"</> "tags"]
@@ -164,11 +164,11 @@ isRepo path = do
 -- | initialize a new repository at a specific location.
 initRepo :: LocalPath -> IO ()
 initRepo path = do
-    exists <- isDirectory path
+    exists <- doesDirectoryExist path
     when exists $ error "destination directory already exists"
     createParentDirectory path
-    createDirectory False path
-    mapM_ (createDirectory False . (path </>))
+    createDirectoryIfMissing False path
+    mapM_ (createDirectoryIfMissing False . (path </>))
         [ "branches", "hooks", "info"
         , "logs", "objects", "refs"
         , "refs"</> "heads", "refs"</> "tags"]
@@ -176,7 +176,7 @@ initRepo path = do
 -- | read the repository's description
 getDescription :: Git hash -> IO (Maybe String)
 getDescription git = do
-    isdescription <- isFile descriptionPath
+    isdescription <- doesFileExist descriptionPath
     if (isdescription)
         then do
                 content <- readTextFile descriptionPath

@@ -16,7 +16,6 @@ module Data.Git.OS
     , listDirectoryFilename
     , listDirectory
     , openFile
-    , readFile
     , readTextFile
     , writeTextFile
     , readBinaryFile
@@ -26,53 +25,47 @@ module Data.Git.OS
     , IOMode(..)
     , Handle
     , createParentDirectory
-    , createDirectory
-    , writeFile
-    , isFile
-    , isDirectory
-    , valid
-    , getSize
+    , createDirectoryIfMissing
+    , doesFileExist
+    , doesDirectoryExist
+    , getFileSize
     , MTime(..)
     , timeZero
     , getMTime
     , withFile
-    , rename
+    , renameFile
     , removeFile
     , getEnvAsPath
-    , absolute
-    , parent
+    , isAbsolute
+    , takeDirectory
     , stripPrefix
-    , localPathEncode
-    , localPathDecode
     ) where
 
 import           Data.Git.Imports
-import           Filesystem.Path.CurrentOS
-import           Filesystem hiding (readTextFile, writeTextFile)
-import qualified Filesystem.Path.Rules as Rules
+import           Data.List
+import           System.Directory
+import           System.FilePath.Posix
 import           System.PosixCompat.Files (getFileStatus, modificationTime)
 import           System.PosixCompat.Types (EpochTime)
-import           System.IO (hClose)
+import           System.IO
 import           System.Environment
-import           Prelude hiding (FilePath, writeFile, readFile)
-import qualified Prelude
+import           System.Posix.Directory (getWorkingDirectory)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 
 type LocalPath = FilePath
 
-listDirectoryFilename :: LocalPath -> IO [String]
-listDirectoryFilename dir =
-     map (Rules.encodeString Rules.posix . filename) <$> listDirectory dir
+listDirectoryFilename :: LocalPath -> IO [FilePath]
+listDirectoryFilename = listDirectory
 
 createParentDirectory :: LocalPath -> IO ()
-createParentDirectory filepath = createTree $ parent filepath
+createParentDirectory = createDirectoryIfMissing True . takeDirectory
 
 readTextFile :: LocalPath -> IO String
-readTextFile filepath = Prelude.readFile (encodeString filepath)
+readTextFile = readFile
 
 writeTextFile :: LocalPath -> String -> IO ()
-writeTextFile filepath = Prelude.writeFile (encodeString filepath)
+writeTextFile = writeFile
 
 newtype MTime = MTime EpochTime deriving (Eq,Ord)
 
@@ -80,22 +73,16 @@ timeZero :: EpochTime
 timeZero = 0
 
 getMTime :: LocalPath -> IO MTime
-getMTime filepath = MTime . modificationTime <$> getFileStatus (encodeString filepath)
+getMTime filepath = MTime . modificationTime <$> getFileStatus filepath
 
 getEnvAsPath :: String -> IO LocalPath
-getEnvAsPath envName = Rules.decodeString Rules.posix <$> getEnv envName
-
-localPathDecode :: B.ByteString -> LocalPath
-localPathDecode = Rules.decode Rules.posix
-
-localPathEncode :: LocalPath -> B.ByteString
-localPathEncode = Rules.encode Rules.posix
+getEnvAsPath envName = getEnv envName
 
 readBinaryFile :: LocalPath -> IO B.ByteString
-readBinaryFile lp = readFile lp
+readBinaryFile = B.readFile
 
 writeBinaryFile :: LocalPath -> B.ByteString -> IO ()
-writeBinaryFile = writeFile
+writeBinaryFile = B.writeFile
 
 readBinaryFileLazy :: LocalPath -> IO L.ByteString
-readBinaryFileLazy lp = L.readFile (encodeString lp)
+readBinaryFileLazy = L.readFile
